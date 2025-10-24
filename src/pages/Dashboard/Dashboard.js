@@ -63,10 +63,10 @@ const Dashboard = () => {
 
   // Helper function to get total amount from order
   const getOrderTotal = (order) => {
-    return Number(order.totalAmount) || 
+    return Number(order.pricing?.grandTotal) || 
            Number(order.total) || 
            Number(order.amount) || 
-           Number(order.grandTotal) || 
+           Number(order.pricing?.grandTotal) || 
            0;
   };
 
@@ -633,7 +633,7 @@ const Dashboard = () => {
                             sx={{ mb: 1 }}
                           />
                           <Typography variant="h6" fontWeight="bold" color="primary.main">
-                            ₹{(order.displayTotal || 0).toFixed(2)}
+                            ₹{(order.pricing?.grandTotal || 0).toFixed(2)}
                           </Typography>
                         </Box>
                       </Box>

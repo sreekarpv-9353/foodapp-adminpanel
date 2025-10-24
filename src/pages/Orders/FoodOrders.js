@@ -87,20 +87,39 @@ const FoodOrders = () => {
       
       const ordersData = querySnapshot.docs.map(doc => {
         const data = doc.data();
+        
+        // Convert Firestore timestamps to JavaScript Date objects
+        const convertTimestamp = (timestamp) => {
+          if (!timestamp) return null;
+          if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+            return timestamp.toDate();
+          }
+          if (typeof timestamp === 'string') {
+            return new Date(timestamp);
+          }
+          return timestamp;
+        };
+
         return {
           id: doc.id,
           ...data,
-          createdAt: data.createdAt || null,
-          updatedAt: data.updatedAt || data.createdAt || null,
+          createdAt: convertTimestamp(data.createdAt),
+          updatedAt: convertTimestamp(data.updatedAt) || convertTimestamp(data.createdAt),
+          // Map the new data structure
+          restaurantId: data.restaurant?.restaurantId || data.restaurantId,
+          customerName: data.customerName || data.deliveryAddress?.name,
+          customerPhone: data.customerPhone || data.deliveryAddress?.phone,
+          totalAmount: data.pricing?.grandTotal || data.totalAmount || 0,
+          itemCount: data.itemCount || (data.items ? data.items.length : 0)
         };
       });
 
-      console.log('Raw food orders:', ordersData);
+      console.log('Processed food orders:', ordersData);
 
       // Sort by updatedAt (most recent first)
       const sortedOrders = ordersData.sort((a, b) => {
-        const dateA = getDateFromTimestamp(a.updatedAt);
-        const dateB = getDateFromTimestamp(b.updatedAt);
+        const dateA = a.updatedAt ? new Date(a.updatedAt) : new Date(0);
+        const dateB = b.updatedAt ? new Date(b.updatedAt) : new Date(0);
         return dateB - dateA; // Descending order (newest first)
       });
 
@@ -119,21 +138,6 @@ const FoodOrders = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Helper function to safely convert Firestore timestamp to Date
-  const getDateFromTimestamp = (timestamp) => {
-    if (!timestamp) return new Date(0);
-    if (timestamp.toDate && typeof timestamp.toDate === 'function') {
-      return timestamp.toDate();
-    }
-    if (timestamp instanceof Date) {
-      return timestamp;
-    }
-    if (typeof timestamp === 'string' || typeof timestamp === 'number') {
-      return new Date(timestamp);
-    }
-    return new Date(0);
   };
 
   // Apply filters to all orders
@@ -159,12 +163,12 @@ const FoodOrders = () => {
       const searchLower = currentFilters.search.toLowerCase();
       filteredOrders = filteredOrders.filter(order => {
         const orderId = order.id?.toLowerCase() || '';
-        const userId = order.userId?.toLowerCase() || '';
-        const customerName = order.deliveryAddress?.name?.toLowerCase() || '';
+        const customerName = order.customerName?.toLowerCase() || '';
+        const customerPhone = order.customerPhone?.toLowerCase() || '';
         
         return orderId.includes(searchLower) ||
-               userId.includes(searchLower) ||
-               customerName.includes(searchLower);
+               customerName.includes(searchLower) ||
+               customerPhone.includes(searchLower);
       });
     }
 
@@ -204,6 +208,7 @@ const FoodOrders = () => {
       pending: 'warning',
       confirmed: 'info',
       preparing: 'secondary',
+      ready: 'info',
       'out-for-delivery': 'primary',
       delivered: 'success',
       cancelled: 'error',
@@ -241,21 +246,32 @@ const FoodOrders = () => {
       },
     },
     { 
-      field: 'restaurantId', 
+      field: 'restaurant', 
       headerName: 'Restaurant', 
       width: 200,
       renderCell: (params) => {
-        const restaurant = restaurants.find(r => r.id === params.value);
-        return restaurant?.name || 'Unknown Restaurant';
+        return params.row.restaurant?.name || 'Unknown Restaurant';
       },
     },
     { 
-      field: 'userId', 
-      headerName: 'Customer ID', 
+      field: 'customerName', 
+      headerName: 'Customer', 
       width: 150,
       renderCell: (params) => {
-        const userId = params.value || '';
-        return userId ? `Cust-${userId.slice(-6)}` : 'N/A';
+        return params.value || 'Unknown Customer';
+      },
+    },
+    { 
+      field: 'customerPhone', 
+      headerName: 'Phone', 
+      width: 130,
+    },
+    { 
+      field: 'itemCount', 
+      headerName: 'Items', 
+      width: 80,
+      renderCell: (params) => {
+        return params.value || 0;
       },
     },
     { 
@@ -283,7 +299,7 @@ const FoodOrders = () => {
       renderCell: (params) => {
         if (!params.value) return '-';
         try {
-          const date = getDateFromTimestamp(params.value);
+          const date = params.value instanceof Date ? params.value : new Date(params.value);
           return dayjs(date).format('MMM D, YYYY h:mm A');
         } catch (error) {
           return '-';
@@ -297,7 +313,7 @@ const FoodOrders = () => {
       renderCell: (params) => {
         if (!params.value) return '-';
         try {
-          const date = getDateFromTimestamp(params.value);
+          const date = params.value instanceof Date ? params.value : new Date(params.value);
           return dayjs(date).format('MMM D, YYYY h:mm A');
         } catch (error) {
           return '-';
@@ -341,6 +357,7 @@ const FoodOrders = () => {
     'pending',
     'confirmed',
     'preparing',
+    'ready',
     'out-for-delivery',
     'delivered',
     'cancelled',
@@ -354,7 +371,7 @@ const FoodOrders = () => {
     return count;
   };
 
-  // Calculate items total
+  // Calculate items total from items array (fallback)
   const calculateItemsTotal = (items) => {
     if (!items || !Array.isArray(items)) return 0;
     return items.reduce((total, item) => {
@@ -458,7 +475,7 @@ const FoodOrders = () => {
                     </InputAdornment>
                   ),
                 }}
-                placeholder="Order ID, Customer ID, Name..."
+                placeholder="Order ID, Customer Name, Phone..."
               />
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
@@ -534,6 +551,9 @@ const FoodOrders = () => {
             <Typography gutterBottom>
               Order ID: <strong>#{selectedOrder?.id?.slice(-6) || selectedOrder?.id}</strong>
             </Typography>
+            <Typography gutterBottom>
+              Customer: <strong>{selectedOrder?.customerName || 'Unknown'}</strong>
+            </Typography>
             <Typography gutterBottom sx={{ mb: 3 }}>
               Current Status: <Chip 
                 label={selectedOrder?.status || 'pending'} 
@@ -602,15 +622,15 @@ const FoodOrders = () => {
                         </Typography>
                       </Grid>
                       <Grid item xs={6}>
-                        <Typography variant="body2" color="textSecondary">Customer ID</Typography>
-                        <Typography variant="body1">
-                          {selectedOrder.userId ? `Cust-${selectedOrder.userId.slice(-6)}` : 'N/A'}
+                        <Typography variant="body2" color="textSecondary">Customer</Typography>
+                        <Typography variant="body1" fontWeight="bold">
+                          {selectedOrder.customerName || 'Unknown'}
                         </Typography>
                       </Grid>
                       <Grid item xs={6}>
                         <Typography variant="body2" color="textSecondary">Restaurant</Typography>
                         <Typography variant="body1" fontWeight="medium">
-                          {restaurants.find(r => r.id === selectedOrder.restaurantId)?.name || 'Unknown Restaurant'}
+                          {selectedOrder.restaurant?.name || 'Unknown Restaurant'}
                         </Typography>
                       </Grid>
                       <Grid item xs={6}>
@@ -623,7 +643,7 @@ const FoodOrders = () => {
                         <Typography variant="body2" color="textSecondary">Order Date</Typography>
                         <Typography variant="body1">
                           {selectedOrder.createdAt ? 
-                            dayjs(getDateFromTimestamp(selectedOrder.createdAt)).format('MMM D, YYYY h:mm A') : 
+                            dayjs(selectedOrder.createdAt).format('MMM D, YYYY h:mm A') : 
                             'N/A'
                           }
                         </Typography>
@@ -632,11 +652,27 @@ const FoodOrders = () => {
                         <Typography variant="body2" color="textSecondary">Last Updated</Typography>
                         <Typography variant="body1">
                           {selectedOrder.updatedAt ? 
-                            dayjs(getDateFromTimestamp(selectedOrder.updatedAt)).format('MMM D, YYYY h:mm A') : 
+                            dayjs(selectedOrder.updatedAt).format('MMM D, YYYY h:mm A') : 
                             'N/A'
                           }
                         </Typography>
                       </Grid>
+                      {selectedOrder.deliveryTime && (
+                        <Grid item xs={6}>
+                          <Typography variant="body2" color="textSecondary">Delivery Time</Typography>
+                          <Typography variant="body1">
+                            {selectedOrder.deliveryTime} minutes
+                          </Typography>
+                        </Grid>
+                      )}
+                      {selectedOrder.deliveryZone && (
+                        <Grid item xs={6}>
+                          <Typography variant="body2" color="textSecondary">Delivery Zone</Typography>
+                          <Typography variant="body1">
+                            {selectedOrder.deliveryZone}
+                          </Typography>
+                        </Grid>
+                      )}
                     </Grid>
                   </Card>
                 </Grid>
@@ -656,7 +692,12 @@ const FoodOrders = () => {
                     </Box>
                     {selectedOrder.items && (
                       <Typography variant="body2" sx={{ textAlign: 'center', mt: 1 }}>
-                        {calculateTotalItems(selectedOrder.items)} items
+                        {selectedOrder.itemCount || selectedOrder.items.length} items
+                      </Typography>
+                    )}
+                    {selectedOrder.restaurant?.rating && (
+                      <Typography variant="body2" sx={{ textAlign: 'center', mt: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        ⭐ {selectedOrder.restaurant.rating}
                       </Typography>
                     )}
                   </Card>
@@ -682,7 +723,7 @@ const FoodOrders = () => {
                         <Box>
                           <Typography variant="body2" color="textSecondary">Customer Name</Typography>
                           <Typography variant="body1" fontWeight="bold">
-                            {selectedOrder.deliveryAddress.name || 'Not Provided'}
+                            {selectedOrder.deliveryAddress.name || selectedOrder.customerName || 'Not Provided'}
                           </Typography>
                         </Box>
                       </Box>
@@ -696,7 +737,7 @@ const FoodOrders = () => {
                         <Box>
                           <Typography variant="body2" color="textSecondary">Phone Number</Typography>
                           <Typography variant="body1" fontWeight="bold">
-                            {selectedOrder.deliveryAddress.phone || 'Not Provided'}
+                            {selectedOrder.deliveryAddress.phone || selectedOrder.customerPhone || 'Not Provided'}
                           </Typography>
                         </Box>
                       </Box>
@@ -711,7 +752,7 @@ const FoodOrders = () => {
                             {selectedOrder.deliveryAddress.street || 'Street not provided'}
                           </Typography>
                           <Typography variant="body1">
-                            {selectedOrder.deliveryAddress.city || ''}
+                            {selectedOrder.deliveryAddress.villageTown || selectedOrder.deliveryAddress.city || ''}
                             {selectedOrder.deliveryAddress.state && `, ${selectedOrder.deliveryAddress.state}`}
                             {selectedOrder.deliveryAddress.zipCode && ` - ${selectedOrder.deliveryAddress.zipCode}`}
                           </Typography>
@@ -741,7 +782,7 @@ const FoodOrders = () => {
                 Order Items
                 {selectedOrder.items && (
                   <Chip 
-                    label={`${selectedOrder.items.length} items`} 
+                    label={`${selectedOrder.itemCount || selectedOrder.items.length} items`} 
                     size="small" 
                     sx={{ ml: 1 }}
                     color="primary"
@@ -773,9 +814,9 @@ const FoodOrders = () => {
                               <Typography variant="body1" fontWeight="bold">
                                 {item.name || 'Unknown Item'}
                               </Typography>
-                              {item.description && (
+                              {item.category && (
                                 <Typography variant="body2" color="textSecondary">
-                                  {item.description}
+                                  {item.category}
                                 </Typography>
                               )}
                             </Box>
@@ -822,19 +863,19 @@ const FoodOrders = () => {
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                           <Typography>Items Total:</Typography>
                           <Typography fontWeight="bold">
-                            ₹{calculateItemsTotal(selectedOrder.items).toFixed(2)}
+                            ₹{(selectedOrder.pricing?.itemsTotal || calculateItemsTotal(selectedOrder.items)).toFixed(2)}
                           </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                           <Typography>Delivery Fee:</Typography>
                           <Typography fontWeight="bold">
-                            ₹{((selectedOrder.deliveryFee || selectedOrder.deliveryCharge) || 0).toFixed(2)}
+                            ₹{(selectedOrder.pricing?.deliveryFee || 0).toFixed(2)}
                           </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                          <Typography>Tax & Charges:</Typography>
+                          <Typography>Tax ({selectedOrder.pricing?.taxPercentage || 5}%):</Typography>
                           <Typography fontWeight="bold">
-                            ₹{((selectedOrder.taxAmount || selectedOrder.tax) || 0).toFixed(2)}
+                            ₹{(selectedOrder.pricing?.taxAmount || 0).toFixed(2)}
                           </Typography>
                         </Box>
                       </Grid>
@@ -842,7 +883,7 @@ const FoodOrders = () => {
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 2, borderTop: 2, borderColor: 'divider' }}>
                           <Typography variant="h6">Grand Total:</Typography>
                           <Typography variant="h6" fontWeight="bold">
-                            ₹{(selectedOrder.totalAmount || 0).toFixed(2)}
+                            ₹{(selectedOrder.pricing?.grandTotal || selectedOrder.totalAmount || 0).toFixed(2)}
                           </Typography>
                         </Box>
                       </Grid>

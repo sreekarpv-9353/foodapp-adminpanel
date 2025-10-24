@@ -59,7 +59,7 @@ const GroceryOrders = () => {
       
       console.log('Fetching grocery orders...');
       
-      // Query to get only grocery orders
+      // Query to get grocery orders using both orderType and type fields
       const q = query(
         collection(db, 'orders'),
         where('orderType', '==', 'grocery')
@@ -71,20 +71,38 @@ const GroceryOrders = () => {
       
       const ordersData = querySnapshot.docs.map(doc => {
         const data = doc.data();
+        
+        // Convert Firestore timestamps to JavaScript Date objects
+        const convertTimestamp = (timestamp) => {
+          if (!timestamp) return null;
+          if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+            return timestamp.toDate();
+          }
+          if (typeof timestamp === 'string') {
+            return new Date(timestamp);
+          }
+          return timestamp;
+        };
+
         return {
           id: doc.id,
           ...data,
-          createdAt: data.createdAt || null,
-          updatedAt: data.updatedAt || data.createdAt || null,
+          createdAt: convertTimestamp(data.createdAt),
+          updatedAt: convertTimestamp(data.updatedAt) || convertTimestamp(data.createdAt),
+          // Map the new data structure
+          customerName: data.customerName || data.deliveryAddress?.name,
+          customerPhone: data.customerPhone || data.deliveryAddress?.phone,
+          totalAmount: data.pricing?.grandTotal || data.totalAmount || 0,
+          itemCount: data.itemCount || (data.items ? data.items.length : 0)
         };
       });
 
-      console.log('Raw grocery orders:', ordersData);
+      console.log('Processed grocery orders:', ordersData);
 
       // Sort by updatedAt (most recent first)
       const sortedOrders = ordersData.sort((a, b) => {
-        const dateA = getDateFromTimestamp(a.updatedAt);
-        const dateB = getDateFromTimestamp(b.updatedAt);
+        const dateA = a.updatedAt ? new Date(a.updatedAt) : new Date(0);
+        const dateB = b.updatedAt ? new Date(b.updatedAt) : new Date(0);
         return dateB - dateA; // Descending order (newest first)
       });
 
@@ -105,21 +123,6 @@ const GroceryOrders = () => {
     }
   };
 
-  // Helper function to safely convert Firestore timestamp to Date
-  const getDateFromTimestamp = (timestamp) => {
-    if (!timestamp) return new Date(0);
-    if (timestamp.toDate && typeof timestamp.toDate === 'function') {
-      return timestamp.toDate();
-    }
-    if (timestamp instanceof Date) {
-      return timestamp;
-    }
-    if (typeof timestamp === 'string' || typeof timestamp === 'number') {
-      return new Date(timestamp);
-    }
-    return new Date(0);
-  };
-
   // Apply filters to all orders
   const applyFilters = (ordersToFilter, currentFilters) => {
     let filteredOrders = [...ordersToFilter];
@@ -136,12 +139,12 @@ const GroceryOrders = () => {
       const searchLower = currentFilters.search.toLowerCase();
       filteredOrders = filteredOrders.filter(order => {
         const orderId = order.id?.toLowerCase() || '';
-        const userId = order.userId?.toLowerCase() || '';
-        const customerName = order.deliveryAddress?.name?.toLowerCase() || '';
+        const customerName = order.customerName?.toLowerCase() || '';
+        const customerPhone = order.customerPhone?.toLowerCase() || '';
         
         return orderId.includes(searchLower) ||
-               userId.includes(searchLower) ||
-               customerName.includes(searchLower);
+               customerName.includes(searchLower) ||
+               customerPhone.includes(searchLower);
       });
     }
 
@@ -208,7 +211,7 @@ const GroceryOrders = () => {
     }
   };
 
-  // Calculate items total
+  // Calculate items total from items array (fallback)
   const calculateItemsTotal = (items) => {
     if (!items || !Array.isArray(items)) return 0;
     return items.reduce((total, item) => {
@@ -235,12 +238,24 @@ const GroceryOrders = () => {
       },
     },
     { 
-      field: 'userId', 
-      headerName: 'Customer ID', 
+      field: 'customerName', 
+      headerName: 'Customer', 
       width: 150,
       renderCell: (params) => {
-        const userId = params.value || '';
-        return userId ? `Cust-${userId.slice(-6)}` : 'N/A';
+        return params.value || 'Unknown Customer';
+      },
+    },
+    { 
+      field: 'customerPhone', 
+      headerName: 'Phone', 
+      width: 130,
+    },
+    { 
+      field: 'itemCount', 
+      headerName: 'Items', 
+      width: 80,
+      renderCell: (params) => {
+        return params.value || 0;
       },
     },
     { 
@@ -274,7 +289,7 @@ const GroceryOrders = () => {
       renderCell: (params) => {
         if (!params.value) return '-';
         try {
-          const date = getDateFromTimestamp(params.value);
+          const date = params.value instanceof Date ? params.value : new Date(params.value);
           return dayjs(date).format('MMM D, YYYY h:mm A');
         } catch (error) {
           return '-';
@@ -288,7 +303,7 @@ const GroceryOrders = () => {
       renderCell: (params) => {
         if (!params.value) return '-';
         try {
-          const date = getDateFromTimestamp(params.value);
+          const date = params.value instanceof Date ? params.value : new Date(params.value);
           return dayjs(date).format('MMM D, YYYY h:mm A');
         } catch (error) {
           return '-';
@@ -315,7 +330,7 @@ const GroceryOrders = () => {
           <Button
             size="small"
             variant="contained"
-            color="primary"
+            color="success"
             onClick={() => {
               setSelectedOrder(params.row);
               setStatusDialogOpen(true);
@@ -417,13 +432,14 @@ const GroceryOrders = () => {
                     </InputAdornment>
                   ),
                 }}
-                placeholder="Order ID, Customer ID, Name..."
+                placeholder="Order ID, Customer Name, Phone..."
               />
             </Grid>
             <Grid item xs={12} sm={6} md={5}>
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <Button 
                   variant="contained"
+                  color="success"
                   startIcon={loading ? <CircularProgress size={20} /> : <RefreshIcon />}
                   onClick={fetchOrders}
                   disabled={loading}
@@ -493,6 +509,9 @@ const GroceryOrders = () => {
             <Typography gutterBottom>
               Order ID: <strong>#{selectedOrder?.id?.slice(-6) || selectedOrder?.id}</strong>
             </Typography>
+            <Typography gutterBottom>
+              Customer: <strong>{selectedOrder?.customerName || 'Unknown'}</strong>
+            </Typography>
             <Typography gutterBottom sx={{ mb: 3 }}>
               Current Status: <Chip 
                 label={selectedOrder?.status || 'pending'} 
@@ -561,9 +580,9 @@ const GroceryOrders = () => {
                         </Typography>
                       </Grid>
                       <Grid item xs={6}>
-                        <Typography variant="body2" color="textSecondary">Customer ID</Typography>
-                        <Typography variant="body1">
-                          {selectedOrder.userId ? `Cust-${selectedOrder.userId.slice(-6)}` : 'N/A'}
+                        <Typography variant="body2" color="textSecondary">Customer</Typography>
+                        <Typography variant="body1" fontWeight="bold">
+                          {selectedOrder.customerName || 'Unknown'}
                         </Typography>
                       </Grid>
                       <Grid item xs={6}>
@@ -585,7 +604,7 @@ const GroceryOrders = () => {
                         <Typography variant="body2" color="textSecondary">Order Date</Typography>
                         <Typography variant="body1">
                           {selectedOrder.createdAt ? 
-                            dayjs(getDateFromTimestamp(selectedOrder.createdAt)).format('MMM D, YYYY h:mm A') : 
+                            dayjs(selectedOrder.createdAt).format('MMM D, YYYY h:mm A') : 
                             'N/A'
                           }
                         </Typography>
@@ -594,11 +613,27 @@ const GroceryOrders = () => {
                         <Typography variant="body2" color="textSecondary">Last Updated</Typography>
                         <Typography variant="body1">
                           {selectedOrder.updatedAt ? 
-                            dayjs(getDateFromTimestamp(selectedOrder.updatedAt)).format('MMM D, YYYY h:mm A') : 
+                            dayjs(selectedOrder.updatedAt).format('MMM D, YYYY h:mm A') : 
                             'N/A'
                           }
                         </Typography>
                       </Grid>
+                      {selectedOrder.deliveryTime && (
+                        <Grid item xs={6}>
+                          <Typography variant="body2" color="textSecondary">Delivery Time</Typography>
+                          <Typography variant="body1">
+                            {selectedOrder.deliveryTime} minutes
+                          </Typography>
+                        </Grid>
+                      )}
+                      {selectedOrder.deliveryZone && (
+                        <Grid item xs={6}>
+                          <Typography variant="body2" color="textSecondary">Delivery Zone</Typography>
+                          <Typography variant="body1">
+                            {selectedOrder.deliveryZone}
+                          </Typography>
+                        </Grid>
+                      )}
                     </Grid>
                   </Card>
                 </Grid>
@@ -618,7 +653,7 @@ const GroceryOrders = () => {
                     </Box>
                     {selectedOrder.items && (
                       <Typography variant="body2" sx={{ textAlign: 'center', mt: 1 }}>
-                        {calculateTotalItems(selectedOrder.items)} grocery items
+                        {selectedOrder.itemCount || selectedOrder.items.length} grocery items
                       </Typography>
                     )}
                   </Card>
@@ -644,7 +679,7 @@ const GroceryOrders = () => {
                         <Box>
                           <Typography variant="body2" color="textSecondary">Customer Name</Typography>
                           <Typography variant="body1" fontWeight="bold">
-                            {selectedOrder.deliveryAddress.name || 'Not Provided'}
+                            {selectedOrder.deliveryAddress.name || selectedOrder.customerName || 'Not Provided'}
                           </Typography>
                         </Box>
                       </Box>
@@ -658,7 +693,7 @@ const GroceryOrders = () => {
                         <Box>
                           <Typography variant="body2" color="textSecondary">Phone Number</Typography>
                           <Typography variant="body1" fontWeight="bold">
-                            {selectedOrder.deliveryAddress.phone || 'Not Provided'}
+                            {selectedOrder.deliveryAddress.phone || selectedOrder.customerPhone || 'Not Provided'}
                           </Typography>
                         </Box>
                       </Box>
@@ -673,7 +708,7 @@ const GroceryOrders = () => {
                             {selectedOrder.deliveryAddress.street || 'Street not provided'}
                           </Typography>
                           <Typography variant="body1">
-                            {selectedOrder.deliveryAddress.city || ''}
+                            {selectedOrder.deliveryAddress.villageTown || selectedOrder.deliveryAddress.city || ''}
                             {selectedOrder.deliveryAddress.state && `, ${selectedOrder.deliveryAddress.state}`}
                             {selectedOrder.deliveryAddress.zipCode && ` - ${selectedOrder.deliveryAddress.zipCode}`}
                           </Typography>
@@ -703,7 +738,7 @@ const GroceryOrders = () => {
                 Grocery Items
                 {selectedOrder.items && (
                   <Chip 
-                    label={`${selectedOrder.items.length} items`} 
+                    label={`${selectedOrder.itemCount || selectedOrder.items.length} items`} 
                     size="small" 
                     sx={{ ml: 1 }}
                     color="success"
@@ -798,19 +833,19 @@ const GroceryOrders = () => {
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                           <Typography>Items Total:</Typography>
                           <Typography fontWeight="bold">
-                            ₹{calculateItemsTotal(selectedOrder.items).toFixed(2)}
+                            ₹{(selectedOrder.pricing?.itemsTotal || calculateItemsTotal(selectedOrder.items)).toFixed(2)}
                           </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                           <Typography>Delivery Fee:</Typography>
                           <Typography fontWeight="bold">
-                            ₹{((selectedOrder.deliveryFee || selectedOrder.deliveryCharge) || 0).toFixed(2)}
+                            ₹{(selectedOrder.pricing?.deliveryFee || 0).toFixed(2)}
                           </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                          <Typography>Tax & Charges:</Typography>
+                          <Typography>Tax ({selectedOrder.pricing?.taxPercentage || 5}%):</Typography>
                           <Typography fontWeight="bold">
-                            ₹{((selectedOrder.taxAmount || selectedOrder.tax) || 0).toFixed(2)}
+                            ₹{(selectedOrder.pricing?.taxAmount || 0).toFixed(2)}
                           </Typography>
                         </Box>
                       </Grid>
@@ -818,7 +853,7 @@ const GroceryOrders = () => {
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 2, borderTop: 2, borderColor: 'divider' }}>
                           <Typography variant="h6">Grand Total:</Typography>
                           <Typography variant="h6" fontWeight="bold">
-                            ₹{(selectedOrder.totalAmount || 0).toFixed(2)}
+                            ₹{(selectedOrder.pricing?.grandTotal || selectedOrder.totalAmount || 0).toFixed(2)}
                           </Typography>
                         </Box>
                       </Grid>
