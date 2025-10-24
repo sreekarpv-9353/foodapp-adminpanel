@@ -15,6 +15,7 @@ import MenuManagement from './pages/Menu/MenuManagement';
 import FoodOrders from './pages/Orders/FoodOrders';
 import GroceryItems from './pages/Grocery/GroceryItems';
 import GroceryOrders from './pages/Grocery/GroceryOrders';
+import AppSettings from './pages/Settings/AppSettings'; // Add this import
 import { useAuth } from './hooks/useAuth';
 
 const theme = createTheme({
@@ -87,6 +88,14 @@ function App() {
                 <PrivateRoute>
                   <Layout>
                     <GroceryOrders />
+                  </Layout>
+                </PrivateRoute>
+              } />
+              {/* Add Settings Route */}
+              <Route path="/settings" element={
+                <PrivateRoute>
+                  <Layout>
+                    <AppSettings />
                   </Layout>
                 </PrivateRoute>
               } />

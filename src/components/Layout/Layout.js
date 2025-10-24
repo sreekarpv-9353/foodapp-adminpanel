@@ -20,6 +20,7 @@ import {
   LocalGroceryStore as GroceryIcon,
   Receipt as OrderIcon,
   Logout as LogoutIcon,
+  Settings as SettingsIcon, // Add this import
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
@@ -32,6 +33,7 @@ const menuItems = [
   { text: 'Food Orders', icon: <FastfoodIcon />, path: '/food-orders' },
   { text: 'Grocery Items', icon: <GroceryIcon />, path: '/grocery-items' },
   { text: 'Grocery Orders', icon: <ShoppingCartIcon />, path: '/grocery-orders' },
+  { text: 'App Settings', icon: <SettingsIcon />, path: '/settings' }, // Add this line
 ];
 
 const Layout = ({ children }) => {

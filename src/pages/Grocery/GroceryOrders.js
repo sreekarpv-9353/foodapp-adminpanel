@@ -15,21 +15,38 @@ import {
   InputLabel,
   Select,
   Grid,
+  TextField,
+  InputAdornment,
+  Alert,
+  CircularProgress,
+  Divider,
+  Avatar,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
-import { collection, getDocs, updateDoc, doc, query, orderBy, where } from 'firebase/firestore';
+import { collection, getDocs, updateDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { toast } from 'react-toastify';
 import dayjs from 'dayjs';
+import SearchIcon from '@mui/icons-material/Search';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
+import PersonIcon from '@mui/icons-material/Person';
+import PhoneIcon from '@mui/icons-material/Phone';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import LocalGroceryStoreIcon from '@mui/icons-material/LocalGroceryStore';
 
 const GroceryOrders = () => {
   const [orders, setOrders] = useState([]);
+  const [allOrders, setAllOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [filters, setFilters] = useState({
     status: '',
+    search: '',
   });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetchOrders();
@@ -37,40 +54,126 @@ const GroceryOrders = () => {
 
   const fetchOrders = async () => {
     try {
-      // Query the unified 'orders' collection and filter by orderType = 'grocery'
-      let q = query(
-        collection(db, 'orders'), 
+      setLoading(true);
+      setError('');
+      
+      console.log('Fetching grocery orders...');
+      
+      // Query to get only grocery orders
+      const q = query(
+        collection(db, 'orders'),
         where('orderType', '==', 'grocery')
-        // orderBy('createdAt', 'desc')
       );
       
-      // Apply additional status filter if set
-      if (filters.status) {
-        q = query(
-          collection(db, 'orders'),
-          where('orderType', '==', 'grocery'),
-          where('status', '==', filters.status),
-          orderBy('createdAt', 'desc')
-        );
-      }
-
       const querySnapshot = await getDocs(q);
-      const ordersData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
       
-      console.log('Fetched grocery orders:', ordersData);
-      setOrders(ordersData);
+      console.log('Grocery orders found:', querySnapshot.size);
+      
+      const ordersData = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt || null,
+          updatedAt: data.updatedAt || data.createdAt || null,
+        };
+      });
+
+      console.log('Raw grocery orders:', ordersData);
+
+      // Sort by updatedAt (most recent first)
+      const sortedOrders = ordersData.sort((a, b) => {
+        const dateA = getDateFromTimestamp(a.updatedAt);
+        const dateB = getDateFromTimestamp(b.updatedAt);
+        return dateB - dateA; // Descending order (newest first)
+      });
+
+      console.log('Sorted grocery orders:', sortedOrders);
+
+      setAllOrders(sortedOrders);
+      setOrders(sortedOrders);
+      
+      toast.success(`Loaded ${sortedOrders.length} grocery orders`);
+      
     } catch (error) {
-      toast.error('Error fetching grocery orders');
-      console.error('Error:', error);
+      const errorMsg = 'Error fetching orders: ' + error.message;
+      console.error('Fetch Error:', error);
+      setError(errorMsg);
+      toast.error(errorMsg);
+    } finally {
+      setLoading(false);
     }
   };
 
+  // Helper function to safely convert Firestore timestamp to Date
+  const getDateFromTimestamp = (timestamp) => {
+    if (!timestamp) return new Date(0);
+    if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+      return timestamp.toDate();
+    }
+    if (timestamp instanceof Date) {
+      return timestamp;
+    }
+    if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+      return new Date(timestamp);
+    }
+    return new Date(0);
+  };
+
+  // Apply filters to all orders
+  const applyFilters = (ordersToFilter, currentFilters) => {
+    let filteredOrders = [...ordersToFilter];
+
+    // Filter by status
+    if (currentFilters.status) {
+      filteredOrders = filteredOrders.filter(order => 
+        order.status === currentFilters.status
+      );
+    }
+
+    // Filter by search
+    if (currentFilters.search) {
+      const searchLower = currentFilters.search.toLowerCase();
+      filteredOrders = filteredOrders.filter(order => {
+        const orderId = order.id?.toLowerCase() || '';
+        const userId = order.userId?.toLowerCase() || '';
+        const customerName = order.deliveryAddress?.name?.toLowerCase() || '';
+        
+        return orderId.includes(searchLower) ||
+               userId.includes(searchLower) ||
+               customerName.includes(searchLower);
+      });
+    }
+
+    setOrders(filteredOrders);
+  };
+
   useEffect(() => {
-    fetchOrders();
-  }, [filters]);
+    if (allOrders.length > 0) {
+      applyFilters(allOrders, filters);
+    }
+  }, [filters, allOrders]);
+
+  const handleFilterChange = (filter, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [filter]: value,
+    }));
+  };
+
+  const handleSearchChange = (event) => {
+    setFilters(prev => ({
+      ...prev,
+      search: event.target.value,
+    }));
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      status: '',
+      search: '',
+    });
+  };
 
   const getStatusColor = (status) => {
     const colors = {
@@ -92,24 +195,33 @@ const GroceryOrders = () => {
     try {
       await updateDoc(doc(db, 'orders', selectedOrder.id), {
         status: newStatus,
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date(),
       });
       
       toast.success(`Order status updated to ${newStatus}`);
       setStatusDialogOpen(false);
       setSelectedOrder(null);
-      fetchOrders();
+      fetchOrders(); // Refresh to get updated data
     } catch (error) {
-      toast.error('Error updating order status');
-      console.error('Error:', error);
+      toast.error('Error updating order status: ' + error.message);
+      console.error('Update Error:', error);
     }
   };
 
-  const handleFilterChange = (filter, value) => {
-    setFilters(prev => ({
-      ...prev,
-      [filter]: value,
-    }));
+  // Calculate items total
+  const calculateItemsTotal = (items) => {
+    if (!items || !Array.isArray(items)) return 0;
+    return items.reduce((total, item) => {
+      const quantity = item.quantity || 0;
+      const price = item.price || 0;
+      return total + (quantity * price);
+    }, 0);
+  };
+
+  // Calculate total items count
+  const calculateTotalItems = (items) => {
+    if (!items || !Array.isArray(items)) return 0;
+    return items.reduce((total, item) => total + (item.quantity || 0), 0);
   };
 
   const columns = [
@@ -124,17 +236,17 @@ const GroceryOrders = () => {
     },
     { 
       field: 'userId', 
-      headerName: 'Customer', 
+      headerName: 'Customer ID', 
       width: 150,
       renderCell: (params) => {
         const userId = params.value || '';
-        return `Customer ${userId.slice(-6)}`;
+        return userId ? `Cust-${userId.slice(-6)}` : 'N/A';
       },
     },
     { 
       field: 'totalAmount', 
       headerName: 'Total', 
-      width: 120,
+      width: 100,
       renderCell: (params) => `₹${(params.value || 0).toFixed(2)}`,
     },
     { 
@@ -156,13 +268,27 @@ const GroceryOrders = () => {
       renderCell: (params) => params.value || 'COD',
     },
     { 
+      field: 'updatedAt', 
+      headerName: 'Last Updated', 
+      width: 180,
+      renderCell: (params) => {
+        if (!params.value) return '-';
+        try {
+          const date = getDateFromTimestamp(params.value);
+          return dayjs(date).format('MMM D, YYYY h:mm A');
+        } catch (error) {
+          return '-';
+        }
+      },
+    },
+    { 
       field: 'createdAt', 
       headerName: 'Order Date', 
       width: 180,
       renderCell: (params) => {
         if (!params.value) return '-';
         try {
-          const date = params.value.toDate ? params.value.toDate() : new Date(params.value);
+          const date = getDateFromTimestamp(params.value);
           return dayjs(date).format('MMM D, YYYY h:mm A');
         } catch (error) {
           return '-';
@@ -184,7 +310,7 @@ const GroceryOrders = () => {
               setDetailDialogOpen(true);
             }}
           >
-            View
+            View Details
           </Button>
           <Button
             size="small"
@@ -213,11 +339,18 @@ const GroceryOrders = () => {
     'cancelled',
   ];
 
+  const getActiveFiltersCount = () => {
+    let count = 0;
+    if (filters.status) count++;
+    if (filters.search) count++;
+    return count;
+  };
+
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" sx={{ display: 'flex', alignItems: 'center' }}>
-          <span style={{ fontSize: '2rem', marginRight: '12px' }}>🛒</span>
+          <LocalGroceryStoreIcon sx={{ fontSize: '2rem', mr: 1 }} />
           Grocery Orders Management
         </Typography>
         <Chip 
@@ -225,12 +358,34 @@ const GroceryOrders = () => {
           color="success" 
           sx={{ ml: 2 }}
         />
+        {getActiveFiltersCount() > 0 && (
+          <Chip 
+            label={`${getActiveFiltersCount()} filter(s) active`} 
+            color="warning" 
+            sx={{ ml: 1 }}
+            onDelete={clearFilters}
+          />
+        )}
       </Box>
+
+      {/* Error Alert */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+          <Button 
+            size="small" 
+            onClick={fetchOrders}
+            sx={{ ml: 2 }}
+          >
+            Retry
+          </Button>
+        </Alert>
+      )}
 
       {/* Filters */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
-          <Grid container spacing={2}>
+          <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} sm={6} md={3}>
               <FormControl fullWidth size="small">
                 <InputLabel>Status</InputLabel>
@@ -248,35 +403,85 @@ const GroceryOrders = () => {
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Button 
-                variant="outlined" 
-                onClick={fetchOrders}
+            <Grid item xs={12} sm={6} md={4}>
+              <TextField
                 fullWidth
-              >
-                Refresh Orders
-              </Button>
+                size="small"
+                label="Search Orders"
+                value={filters.search}
+                onChange={handleSearchChange}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon />
+                    </InputAdornment>
+                  ),
+                }}
+                placeholder="Order ID, Customer ID, Name..."
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={5}>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button 
+                  variant="contained"
+                  startIcon={loading ? <CircularProgress size={20} /> : <RefreshIcon />}
+                  onClick={fetchOrders}
+                  disabled={loading}
+                >
+                  {loading ? 'Refreshing...' : 'Refresh'}
+                </Button>
+                <Button 
+                  variant="outlined" 
+                  color="secondary"
+                  onClick={clearFilters}
+                  disabled={getActiveFiltersCount() === 0}
+                >
+                  Clear Filters
+                </Button>
+              </Box>
             </Grid>
           </Grid>
         </CardContent>
       </Card>
 
+      {/* Orders DataGrid */}
       <Card>
         <CardContent>
-          <DataGrid
-            rows={orders}
-            columns={columns}
-            pageSize={10}
-            rowsPerPageOptions={[10, 25, 50]}
-            autoHeight
-            disableSelectionOnClick
-            getRowId={(row) => row.id}
-            sx={{
-              '& .MuiDataGrid-cell': {
-                fontSize: '0.875rem',
-              },
-            }}
-          />
+          {loading && allOrders.length === 0 ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 4 }}>
+              <CircularProgress />
+              <Typography sx={{ ml: 2 }}>Loading grocery orders...</Typography>
+            </Box>
+          ) : (
+            <>
+              {orders.length === 0 ? (
+                <Box sx={{ textAlign: 'center', py: 4 }}>
+                  <Typography color="textSecondary" gutterBottom>
+                    No grocery orders found
+                  </Typography>
+                  <Button variant="outlined" onClick={fetchOrders}>
+                    Refresh
+                  </Button>
+                </Box>
+              ) : (
+                <DataGrid
+                  rows={orders}
+                  columns={columns}
+                  pageSize={10}
+                  rowsPerPageOptions={[10, 25, 50]}
+                  autoHeight
+                  disableSelectionOnClick
+                  getRowId={(row) => row.id}
+                  loading={loading}
+                  initialState={{
+                    sorting: {
+                      sortModel: [{ field: 'updatedAt', sort: 'desc' }],
+                    },
+                  }}
+                />
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -323,177 +528,318 @@ const GroceryOrders = () => {
       <Dialog 
         open={detailDialogOpen} 
         onClose={() => setDetailDialogOpen(false)}
-        maxWidth="md"
+        maxWidth="lg"
         fullWidth
+        sx={{ '& .MuiDialog-paper': { maxHeight: '90vh' } }}
       >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center' }}>
-          <span style={{ fontSize: '1.5rem', marginRight: '8px' }}>🛒</span>
-          Grocery Order Details
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', borderBottom: 1, borderColor: 'divider', pb: 2 }}>
+          <LocalGroceryStoreIcon color="success" sx={{ mr: 1 }} />
+          <Typography variant="h6" component="div">
+            Grocery Order Details
+          </Typography>
+          <Chip 
+            label={selectedOrder?.status || 'pending'} 
+            color={getStatusColor(selectedOrder?.status)}
+            sx={{ ml: 2 }}
+          />
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ mt: 2 }}>
           {selectedOrder && (
-            <Grid container spacing={2} sx={{ mt: 1 }}>
-              <Grid item xs={12} sm={6}>
-                <Typography variant="subtitle2" color="textSecondary">Order ID</Typography>
-                <Typography variant="body1" fontWeight="bold">
-                  #{selectedOrder.id?.slice(-6) || selectedOrder.id}
-                </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Typography variant="subtitle2" color="textSecondary">Status</Typography>
-                <Box sx={{ mt: 0.5 }}>
-                  <Chip 
-                    label={selectedOrder.status || 'pending'} 
-                    color={getStatusColor(selectedOrder.status)}
-                    size="small"
-                  />
-                </Box>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Typography variant="subtitle2" color="textSecondary">Total Amount</Typography>
-                <Typography variant="h6" color="success.main">
-                  ₹{(selectedOrder.totalAmount || 0).toFixed(2)}
-                </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Typography variant="subtitle2" color="textSecondary">Payment Method</Typography>
-                <Typography variant="body1">{selectedOrder.paymentMethod || 'COD'}</Typography>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Typography variant="subtitle2" color="textSecondary">Order Date</Typography>
-                <Typography variant="body1">
-                  {selectedOrder.createdAt ? 
-                    (selectedOrder.createdAt.toDate ? 
-                      dayjs(selectedOrder.createdAt.toDate()).format('MMM D, YYYY h:mm A') : 
-                      dayjs(selectedOrder.createdAt).format('MMM D, YYYY h:mm A')
-                    ) : 'N/A'}
-                </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Typography variant="subtitle2" color="textSecondary">Customer ID</Typography>
-                <Typography variant="body1">
-                  {selectedOrder.userId?.slice(-8) || 'N/A'}
-                </Typography>
-              </Grid>
-              <Grid item xs={12}>
-                <Typography variant="subtitle2" color="textSecondary" gutterBottom>
-                  Delivery Address
-                </Typography>
-                <Card variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
-                  {selectedOrder.deliveryAddress ? (
-                    <>
-                      {selectedOrder.deliveryAddress.name && (
-                        <Typography fontWeight="bold">{selectedOrder.deliveryAddress.name}</Typography>
-                      )}
-                      <Typography>{selectedOrder.deliveryAddress.street}</Typography>
-                      <Typography>
-                        {selectedOrder.deliveryAddress.city}
-                        {selectedOrder.deliveryAddress.state && `, ${selectedOrder.deliveryAddress.state}`}
-                        {selectedOrder.deliveryAddress.zipCode && ` - ${selectedOrder.deliveryAddress.zipCode}`}
-                      </Typography>
-                      {selectedOrder.deliveryAddress.phone && (
-                        <Typography color="textSecondary">
-                          Phone: {selectedOrder.deliveryAddress.phone}
+            <Box>
+              {/* Order Header */}
+              <Grid container spacing={3} sx={{ mb: 3 }}>
+                <Grid item xs={12} md={6}>
+                  <Card variant="outlined" sx={{ p: 2 }}>
+                    <Typography variant="subtitle1" fontWeight="bold" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+                      📋 Order Information
+                    </Typography>
+                    <Grid container spacing={1}>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="textSecondary">Order ID</Typography>
+                        <Typography variant="body1" fontWeight="bold">
+                          #{selectedOrder.id?.slice(-8)}
                         </Typography>
-                      )}
-                    </>
-                  ) : (
-                    <Typography color="textSecondary">No delivery address provided</Typography>
-                  )}
-                </Card>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="textSecondary">Customer ID</Typography>
+                        <Typography variant="body1">
+                          {selectedOrder.userId ? `Cust-${selectedOrder.userId.slice(-6)}` : 'N/A'}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="textSecondary">Payment Method</Typography>
+                        <Typography variant="body1">
+                          {selectedOrder.paymentMethod || 'COD'}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="textSecondary">Order Type</Typography>
+                        <Chip 
+                          label="Grocery" 
+                          color="success" 
+                          size="small"
+                          variant="outlined"
+                        />
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="textSecondary">Order Date</Typography>
+                        <Typography variant="body1">
+                          {selectedOrder.createdAt ? 
+                            dayjs(getDateFromTimestamp(selectedOrder.createdAt)).format('MMM D, YYYY h:mm A') : 
+                            'N/A'
+                          }
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="textSecondary">Last Updated</Typography>
+                        <Typography variant="body1">
+                          {selectedOrder.updatedAt ? 
+                            dayjs(getDateFromTimestamp(selectedOrder.updatedAt)).format('MMM D, YYYY h:mm A') : 
+                            'N/A'
+                          }
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </Card>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Card variant="outlined" sx={{ p: 2, bgcolor: 'success.light', color: 'white' }}>
+                    <Typography variant="subtitle1" fontWeight="bold" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+                      💰 Payment Summary
+                    </Typography>
+                    <Box sx={{ textAlign: 'center', py: 1 }}>
+                      <Typography variant="h4" fontWeight="bold">
+                        ₹{(selectedOrder.totalAmount || 0).toFixed(2)}
+                      </Typography>
+                      <Typography variant="body2">
+                        Total Amount
+                      </Typography>
+                    </Box>
+                    {selectedOrder.items && (
+                      <Typography variant="body2" sx={{ textAlign: 'center', mt: 1 }}>
+                        {calculateTotalItems(selectedOrder.items)} grocery items
+                      </Typography>
+                    )}
+                  </Card>
+                </Grid>
               </Grid>
-              <Grid item xs={12}>
-                <Typography variant="h6" gutterBottom sx={{ mt: 2, mb: 2 }}>
-                  📦 Order Items ({selectedOrder.items?.length || 0})
-                </Typography>
-                {selectedOrder.items?.length > 0 ? (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                    {selectedOrder.items.map((item, index) => (
-                      <Card key={index} variant="outlined" sx={{ p: 2, bgcolor: 'background.paper', '&:hover': { boxShadow: 2 } }}>
-                        <Grid container spacing={2} alignItems="center">
-                          <Grid item xs={1}>
-                            <Typography variant="h6" color="textSecondary">
-                              {index + 1}.
+
+              <Divider sx={{ my: 3 }} />
+
+              {/* Delivery Address */}
+              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <LocationOnIcon color="success" sx={{ mr: 1 }} />
+                Delivery Address
+              </Typography>
+              
+              {selectedOrder.deliveryAddress ? (
+                <Card variant="outlined" sx={{ p: 3, mb: 3, bgcolor: 'background.default' }}>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                        <Avatar sx={{ bgcolor: 'success.main', mr: 2, width: 32, height: 32 }}>
+                          <PersonIcon fontSize="small" />
+                        </Avatar>
+                        <Box>
+                          <Typography variant="body2" color="textSecondary">Customer Name</Typography>
+                          <Typography variant="body1" fontWeight="bold">
+                            {selectedOrder.deliveryAddress.name || 'Not Provided'}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Grid>
+                    
+                    <Grid item xs={12} sm={6}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                        <Avatar sx={{ bgcolor: 'info.main', mr: 2, width: 32, height: 32 }}>
+                          <PhoneIcon fontSize="small" />
+                        </Avatar>
+                        <Box>
+                          <Typography variant="body2" color="textSecondary">Phone Number</Typography>
+                          <Typography variant="body1" fontWeight="bold">
+                            {selectedOrder.deliveryAddress.phone || 'Not Provided'}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Grid>
+
+                    <Grid item xs={12}>
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
+                        <LocationOnIcon color="action" sx={{ mr: 2, mt: 0.5 }} />
+                        <Box>
+                          <Typography variant="body2" color="textSecondary">Delivery Address</Typography>
+                          <Typography variant="body1">
+                            {selectedOrder.deliveryAddress.street || 'Street not provided'}
+                          </Typography>
+                          <Typography variant="body1">
+                            {selectedOrder.deliveryAddress.city || ''}
+                            {selectedOrder.deliveryAddress.state && `, ${selectedOrder.deliveryAddress.state}`}
+                            {selectedOrder.deliveryAddress.zipCode && ` - ${selectedOrder.deliveryAddress.zipCode}`}
+                          </Typography>
+                          {selectedOrder.deliveryAddress.landmark && (
+                            <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
+                              Landmark: {selectedOrder.deliveryAddress.landmark}
                             </Typography>
-                          </Grid>
-                          <Grid item xs={11} sm={5}>
-                            <Box>
-                              <Typography variant="body1" fontWeight="bold" sx={{ mb: 0.5 }}>
+                          )}
+                        </Box>
+                      </Box>
+                    </Grid>
+                  </Grid>
+                </Card>
+              ) : (
+                <Card variant="outlined" sx={{ p: 3, mb: 3, bgcolor: 'warning.light' }}>
+                  <Typography color="textSecondary" sx={{ fontStyle: 'italic', textAlign: 'center' }}>
+                    ⚠️ No delivery address provided for this order
+                  </Typography>
+                </Card>
+              )}
+
+              <Divider sx={{ my: 3 }} />
+
+              {/* Grocery Items */}
+              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <ShoppingCartIcon color="success" sx={{ mr: 1 }} />
+                Grocery Items
+                {selectedOrder.items && (
+                  <Chip 
+                    label={`${selectedOrder.items.length} items`} 
+                    size="small" 
+                    sx={{ ml: 1 }}
+                    color="success"
+                  />
+                )}
+              </Typography>
+
+              {selectedOrder.items && selectedOrder.items.length > 0 ? (
+                <Box>
+                  {/* Items List */}
+                  <Card variant="outlined" sx={{ mb: 2 }}>
+                    {selectedOrder.items.map((item, index) => (
+                      <Box key={index}>
+                        <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                            <Avatar 
+                              sx={{ 
+                                bgcolor: 'success.main', 
+                                mr: 2, 
+                                width: 40, 
+                                height: 40,
+                                fontSize: '0.875rem',
+                                fontWeight: 'bold'
+                              }}
+                            >
+                              {index + 1}
+                            </Avatar>
+                            <Box sx={{ flex: 1 }}>
+                              <Typography variant="body1" fontWeight="bold">
                                 {item.name || 'Unknown Item'}
                               </Typography>
                               {item.category && (
                                 <Chip 
                                   label={item.category} 
                                   size="small" 
-                                  color="success"
+                                  color="primary"
                                   variant="outlined"
-                                  sx={{ fontSize: '0.7rem' }}
+                                  sx={{ mt: 0.5 }}
                                 />
                               )}
+                              {item.brand && (
+                                <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
+                                  Brand: {item.brand}
+                                </Typography>
+                              )}
+                              {item.weight && (
+                                <Typography variant="body2" color="textSecondary">
+                                  Weight: {item.weight}
+                                </Typography>
+                              )}
                             </Box>
-                          </Grid>
-                          <Grid item xs={4} sm={2} textAlign="center">
-                            <Typography variant="caption" color="textSecondary" display="block">
-                              Unit Price
-                            </Typography>
-                            <Typography variant="body1" fontWeight="medium">
-                              ₹{(item.price || 0).toFixed(2)}
-                            </Typography>
-                          </Grid>
-                          <Grid item xs={4} sm={2} textAlign="center">
-                            <Typography variant="caption" color="textSecondary" display="block">
-                              Quantity
-                            </Typography>
-                            <Chip 
-                              label={`× ${item.quantity || 0}`}
-                              color="primary"
-                              size="small"
-                              sx={{ fontWeight: 'bold' }}
-                            />
-                          </Grid>
-                          <Grid item xs={4} sm={2} textAlign="right">
-                            <Typography variant="caption" color="textSecondary" display="block">
-                              Subtotal
-                            </Typography>
-                            <Typography variant="body1" fontWeight="bold" color="success.main">
-                              ₹{((item.quantity || 0) * (item.price || 0)).toFixed(2)}
-                            </Typography>
-                          </Grid>
-                        </Grid>
-                      </Card>
+                          </Box>
+                          
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                            <Box sx={{ textAlign: 'center', minWidth: 80 }}>
+                              <Typography variant="body2" color="textSecondary">Unit Price</Typography>
+                              <Typography variant="body1" fontWeight="medium">
+                                ₹{(item.price || 0).toFixed(2)}
+                              </Typography>
+                            </Box>
+                            
+                            <Box sx={{ textAlign: 'center', minWidth: 80 }}>
+                              <Typography variant="body2" color="textSecondary">Quantity</Typography>
+                              <Chip 
+                                label={`× ${item.quantity || 0}`}
+                                color="success"
+                                variant="outlined"
+                                size="small"
+                              />
+                            </Box>
+                            
+                            <Box sx={{ textAlign: 'center', minWidth: 100 }}>
+                              <Typography variant="body2" color="textSecondary">Subtotal</Typography>
+                              <Typography variant="body1" fontWeight="bold" color="success.main">
+                                ₹{((item.quantity || 0) * (item.price || 0)).toFixed(2)}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        </Box>
+                        {index < selectedOrder.items.length - 1 && <Divider />}
+                      </Box>
                     ))}
-                    
-                    {/* Order Summary */}
-                    <Card variant="outlined" sx={{ p: 2, bgcolor: 'primary.50', mt: 1 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography>Items Total:</Typography>
-                        <Typography fontWeight="bold">
-                          ₹{selectedOrder.items.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)}
-                        </Typography>
-                      </Box>
-                      {/* <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography>Delivery Fee:</Typography>
-                        <Typography fontWeight="bold">₹20.00</Typography>
-                      </Box> */}
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 1, borderTop: 2, borderColor: 'divider' }}>
-                        <Typography variant="h6">Grand Total:</Typography>
-                        <Typography variant="h6" color="success.main" fontWeight="bold">
-                          ₹{(selectedOrder.totalAmount || 0).toFixed(2)}
-                        </Typography>
-                      </Box>
-                    </Card>
-                  </Box>
-                ) : (
-                  <Typography color="textSecondary">No items in this order</Typography>
-                )}
-              </Grid>
-            </Grid>
+                  </Card>
+
+                  {/* Order Summary */}
+                  <Card variant="outlined" sx={{ p: 3, bgcolor: 'success.light', color: 'white' }}>
+                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+                      📊 Order Summary
+                    </Typography>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} sm={6}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                          <Typography>Items Total:</Typography>
+                          <Typography fontWeight="bold">
+                            ₹{calculateItemsTotal(selectedOrder.items).toFixed(2)}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                          <Typography>Delivery Fee:</Typography>
+                          <Typography fontWeight="bold">
+                            ₹{((selectedOrder.deliveryFee || selectedOrder.deliveryCharge) || 0).toFixed(2)}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                          <Typography>Tax & Charges:</Typography>
+                          <Typography fontWeight="bold">
+                            ₹{((selectedOrder.taxAmount || selectedOrder.tax) || 0).toFixed(2)}
+                          </Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 2, borderTop: 2, borderColor: 'divider' }}>
+                          <Typography variant="h6">Grand Total:</Typography>
+                          <Typography variant="h6" fontWeight="bold">
+                            ₹{(selectedOrder.totalAmount || 0).toFixed(2)}
+                          </Typography>
+                        </Box>
+                      </Grid>
+                    </Grid>
+                  </Card>
+                </Box>
+              ) : (
+                <Card variant="outlined" sx={{ p: 3, textAlign: 'center' }}>
+                  <Typography color="textSecondary">
+                    No grocery items found in this order
+                  </Typography>
+                </Card>
+              )}
+            </Box>
           )}
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ p: 3, borderTop: 1, borderColor: 'divider' }}>
           <Button onClick={() => setDetailDialogOpen(false)}>Close</Button>
           <Button 
             variant="contained"
+            color="success"
             onClick={() => {
               setDetailDialogOpen(false);
               setStatusDialogOpen(true);
