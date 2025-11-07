@@ -845,7 +845,7 @@ const Restaurants = () => {
                   )}
                 </Grid>
 
-                <Grid item xs={12}>
+                {/* <Grid item xs={12}>
                   <FormControl fullWidth margin="normal">
                     <InputLabel>Select Food Icon</InputLabel>
                     <Select
@@ -912,7 +912,7 @@ const Restaurants = () => {
                       )}
                     </Select>
                   </FormControl>
-                </Grid>
+                </Grid> */}
 
                 <Grid item xs={12} sm={6}>
                   <TextField

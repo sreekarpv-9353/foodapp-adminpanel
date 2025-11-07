@@ -19,6 +19,8 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  CircularProgress,
+  InputAdornment,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -30,134 +32,48 @@ import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs } from 'firebase
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../services/firebase';
 import { toast } from 'react-toastify';
+import imageCompression from 'browser-image-compression';
 
-// Comprehensive list of Indian grocery unicode emojis
-const GROCERY_UNICODES = [
-  // Fruits
-  { category: 'Fruits', name: 'Apple', unicode: '🍎', keywords: 'apple fruit seb' },
-  { category: 'Fruits', name: 'Banana', unicode: '🍌', keywords: 'banana fruit kela' },
-  { category: 'Fruits', name: 'Orange', unicode: '🍊', keywords: 'orange fruit citrus santara' },
-  { category: 'Fruits', name: 'Mango', unicode: '🥭', keywords: 'mango fruit aam' },
-  { category: 'Fruits', name: 'Coconut', unicode: '🥥', keywords: 'coconut fruit nariyal thengai' },
-  { category: 'Fruits', name: 'Lemon', unicode: '🍋', keywords: 'lemon fruit citrus nimbu elumichai' },
-  { category: 'Fruits', name: 'Pomegranate', unicode: '🍒', keywords: 'pomegranate anar mathalam' },
-  { category: 'Fruits', name: 'Guava', unicode: '🫒', keywords: 'guava fruit amrood peru' },
+// Comprehensive unit types for different grocery categories
+const UNIT_TYPES = [
+  // Weight units
+  { value: 'g', label: 'Gram (g)', type: 'weight', category: 'Weight' },
+  { value: 'kg', label: 'Kilogram (kg)', type: 'weight', category: 'Weight' },
+  { value: 'mg', label: 'Milligram (mg)', type: 'weight', category: 'Weight' },
+  { value: 'lb', label: 'Pound (lb)', type: 'weight', category: 'Weight' },
   
-  // Vegetables
-  { category: 'Vegetables', name: 'Tomato', unicode: '🍅', keywords: 'tomato vegetable tamatar thakkali' },
-  { category: 'Vegetables', name: 'Onion', unicode: '🧅', keywords: 'onion pyaz vengayam' },
-  { category: 'Vegetables', name: 'Potato', unicode: '🥔', keywords: 'potato aloo urulaikizhangu' },
-  { category: 'Vegetables', name: 'Carrot', unicode: '🥕', keywords: 'carrot vegetable gajar' },
-  { category: 'Vegetables', name: 'Green Chili', unicode: '🌶️', keywords: 'green chili pepper hari mirch pachai milagai' },
-  { category: 'Vegetables', name: 'Garlic', unicode: '🧄', keywords: 'garlic lahsun poondu' },
-  { category: 'Vegetables', name: 'Ginger', unicode: '🫚', keywords: 'ginger adrak inji' },
-  { category: 'Vegetables', name: 'Okra', unicode: '🥒', keywords: 'okra bhindi ladyfinger vendakkai' },
-  { category: 'Vegetables', name: 'Drumstick', unicode: '🥒', keywords: 'drumstick moringa murungakkai' },
+  // Volume units
+  { value: 'ml', label: 'Milliliter (ml)', type: 'volume', category: 'Volume' },
+  { value: 'l', label: 'Liter (l)', type: 'volume', category: 'Volume' },
   
-  // Grains & Flours
-  { category: 'Grains & Flours', name: 'Rice', unicode: '🍚', keywords: 'rice chawal arisi' },
-  { category: 'Grains & Flours', name: 'Wheat Flour', unicode: '🌾', keywords: 'wheat flour atta godumai maavu' },
-  { category: 'Grains & Flours', name: 'Maida', unicode: '🌾', keywords: 'maida all purpose flour refined flour' },
-  { category: 'Grains & Flours', name: 'Rava', unicode: '🌾', keywords: 'rava sooji semolina ravai bombay rava' },
-  { category: 'Grains & Flours', name: 'Besan', unicode: '🌾', keywords: 'besan gram flour chickpea flour kadalai maavu' },
-  { category: 'Grains & Flours', name: 'Rice Flour', unicode: '🌾', keywords: 'rice flour arisi maavu' },
-  
-  // Pulses
-  { category: 'Pulses & Lentils', name: 'Toor Dal', unicode: '🫘', keywords: 'toor dal arhar pigeon pea thuvaram paruppu' },
-  { category: 'Pulses & Lentils', name: 'Moong Dal', unicode: '🫘', keywords: 'moong dal green gram payatham paruppu' },
-  { category: 'Pulses & Lentils', name: 'Urad Dal', unicode: '🫘', keywords: 'urad dal black gram ulundu' },
-  { category: 'Pulses & Lentils', name: 'Chana Dal', unicode: '🫘', keywords: 'chana dal bengal gram kadalai paruppu' },
-  
-  // Dairy
-  { category: 'Dairy', name: 'Milk', unicode: '🥛', keywords: 'milk dairy doodh paal' },
-  { category: 'Dairy', name: 'Curd', unicode: '🥛', keywords: 'curd yogurt dahi thayir' },
-  { category: 'Dairy', name: 'Paneer', unicode: '🧀', keywords: 'paneer cottage cheese' },
-  { category: 'Dairy', name: 'Ghee', unicode: '🧈', keywords: 'ghee clarified butter nei' },
-  { category: 'Dairy', name: 'Butter', unicode: '🧈', keywords: 'butter venna makhan' },
-  { category: 'Dairy', name: 'Egg', unicode: '🥚', keywords: 'egg anda muttai' },
-  
-  // Oils
-  { category: 'Oils', name: 'Sunflower Oil', unicode: '🫗', keywords: 'sunflower oil cooking surajmukhi tel' },
-  { category: 'Oils', name: 'Coconut Oil', unicode: '🥥', keywords: 'coconut oil nariyal tel thengai ennai' },
-  { category: 'Oils', name: 'Mustard Oil', unicode: '🫗', keywords: 'mustard oil sarson tel kadugu ennai' },
-  
-  // Spices
-  { category: 'Spices', name: 'Turmeric', unicode: '🌿', keywords: 'turmeric haldi manjal' },
-  { category: 'Spices', name: 'Red Chili Powder', unicode: '🌶️', keywords: 'red chili powder lal mirch podi' },
-  { category: 'Spices', name: 'Coriander Powder', unicode: '🌿', keywords: 'coriander powder dhania kothamalli podi' },
-  { category: 'Spices', name: 'Cumin Seeds', unicode: '🌿', keywords: 'cumin jeera seeragam' },
-  { category: 'Spices', name: 'Mustard Seeds', unicode: '🌿', keywords: 'mustard seeds rai kadugu' },
-  { category: 'Spices', name: 'Black Pepper', unicode: '🌿', keywords: 'black pepper kali mirch milagu' },
-  { category: 'Spices', name: 'Curry Leaves', unicode: '🌿', keywords: 'curry leaves kadi patta kariveppilai' },
-  
-  // Masala Powders
-  { category: 'Masala Powders', name: 'Garam Masala', unicode: '🌿', keywords: 'garam masala spice mix' },
-  { category: 'Masala Powders', name: 'Sambar Powder', unicode: '🌿', keywords: 'sambar powder masala' },
-  { category: 'Masala Powders', name: 'Rasam Powder', unicode: '🌿', keywords: 'rasam powder masala' },
-  { category: 'Masala Powders', name: 'Chicken Masala', unicode: '🍗', keywords: 'chicken masala powder' },
-  { category: 'Masala Powders', name: 'Fish Masala', unicode: '🐟', keywords: 'fish masala powder' },
-  { category: 'Masala Powders', name: 'Biryani Masala', unicode: '🍛', keywords: 'biryani masala powder' },
-  { category: 'Masala Powders', name: 'Chaat Masala', unicode: '🌿', keywords: 'chaat masala powder' },
-  
-  // Sweeteners
-  { category: 'Sweeteners', name: 'Sugar', unicode: '🧂', keywords: 'sugar chini sakkarai' },
-  { category: 'Sweeteners', name: 'Jaggery', unicode: '🧂', keywords: 'jaggery gur vellam' },
-  { category: 'Sweeteners', name: 'Honey', unicode: '🍯', keywords: 'honey shahad then' },
-  
-  // Condiments
-  { category: 'Condiments', name: 'Salt', unicode: '🧂', keywords: 'salt namak uppu' },
-  { category: 'Condiments', name: 'Tamarind', unicode: '🌰', keywords: 'tamarind imli puli' },
-  { category: 'Condiments', name: 'Pickle', unicode: '🥒', keywords: 'pickle achar oorugai' },
-  { category: 'Condiments', name: 'Ketchup', unicode: '🍅', keywords: 'tomato ketchup sauce' },
-  
-  // Snacks
-  { category: 'Snacks', name: 'Biscuits', unicode: '🍪', keywords: 'biscuits cookies' },
-  { category: 'Snacks', name: 'Chips', unicode: '🥨', keywords: 'chips lays potato' },
-  { category: 'Snacks', name: 'Namkeen', unicode: '🥨', keywords: 'namkeen mixture' },
-  { category: 'Snacks', name: 'Papad', unicode: '🍪', keywords: 'papad papadam appalam' },
-  { category: 'Snacks', name: 'Murukku', unicode: '🥨', keywords: 'murukku chakli' },
-  
-  // Street Food
-  { category: 'Street Food', name: 'Pani Puri Kit', unicode: '🥟', keywords: 'pani puri golgappa kit packet' },
-  { category: 'Street Food', name: 'Bhel Mix', unicode: '🥨', keywords: 'bhel puri mix' },
-  { category: 'Street Food', name: 'Samosa', unicode: '🥟', keywords: 'samosa frozen' },
-  
-  // Instant Foods
-  { category: 'Instant Foods', name: 'Maggi', unicode: '🍜', keywords: 'maggi noodles instant' },
-  { category: 'Instant Foods', name: 'Pasta', unicode: '🍝', keywords: 'pasta penne macaroni' },
-  { category: 'Instant Foods', name: 'Oats', unicode: '🥣', keywords: 'oats quaker saffola' },
-  { category: 'Instant Foods', name: 'Vermicelli', unicode: '🍜', keywords: 'vermicelli semiya sevai' },
-  
-  // Beverages
-  { category: 'Beverages', name: 'Tea', unicode: '🍵', keywords: 'tea chai' },
-  { category: 'Beverages', name: 'Coffee', unicode: '☕', keywords: 'coffee filter kaapi' },
-  { category: 'Beverages', name: 'Juice', unicode: '🧃', keywords: 'juice pack real tropicana' },
-  { category: 'Beverages', name: 'Soft Drink', unicode: '🥤', keywords: 'soft drink cola pepsi' },
-  { category: 'Beverages', name: 'Water', unicode: '💧', keywords: 'water bottle mineral bisleri' },
-  
-  // Nuts
-  { category: 'Nuts', name: 'Cashew', unicode: '🥜', keywords: 'cashew kaju munthiri' },
-  { category: 'Nuts', name: 'Almonds', unicode: '🥜', keywords: 'almonds badam' },
-  { category: 'Nuts', name: 'Peanuts', unicode: '🥜', keywords: 'peanuts moongfali verkadalai' },
-  { category: 'Nuts', name: 'Raisins', unicode: '🍇', keywords: 'raisins kishmish thiratchai' },
-  
-  // Bakery
-  { category: 'Bakery', name: 'Bread', unicode: '🍞', keywords: 'bread pav' },
-  { category: 'Bakery', name: 'Cake', unicode: '🍰', keywords: 'cake pastry' },
-  
-  // Meat
-  { category: 'Meat', name: 'Chicken', unicode: '🍗', keywords: 'chicken poultry kozhi' },
-  { category: 'Meat', name: 'Fish', unicode: '🐟', keywords: 'fish machli meen' },
-  { category: 'Meat', name: 'Prawns', unicode: '🦐', keywords: 'prawns shrimp jhinga eral' },
-  
-  // Household
-  { category: 'Household', name: 'Soap', unicode: '🧼', keywords: 'soap sabun' },
-  { category: 'Household', name: 'Detergent', unicode: '🧴', keywords: 'detergent washing powder' },
-  { category: 'Household', name: 'Tissue', unicode: '🧻', keywords: 'tissue paper' },
-  
-  // Other
-  { category: 'Other', name: 'Shopping Cart', unicode: '🛒', keywords: 'shopping cart grocery' },
-  { category: 'Other', name: 'Package', unicode: '📦', keywords: 'box package' },
+  // Quantity units
+  { value: 'pc', label: 'Piece (pc)', type: 'quantity', category: 'Quantity' },
+  { value: 'dozen', label: 'Dozen', type: 'quantity', category: 'Quantity' },
+  { value: 'pack', label: 'Pack', type: 'quantity', category: 'Quantity' },
+  { value: 'bunch', label: 'Bunch', type: 'quantity', category: 'Quantity' },
+  { value: 'bottle', label: 'Bottle', type: 'quantity', category: 'Quantity' },
+  { value: 'jar', label: 'Jar', type: 'quantity', category: 'Quantity' },
+  { value: 'can', label: 'Can', type: 'quantity', category: 'Quantity' },
+  { value: 'box', label: 'Box', type: 'quantity', category: 'Quantity' },
+  { value: 'packet', label: 'Packet', type: 'quantity', category: 'Quantity' },
+  { value: 'carton', label: 'Carton', type: 'quantity', category: 'Quantity' },
+];
+
+// Common grocery categories with suggested units
+const GROCERY_CATEGORIES = [
+  { name: 'Fruits & Vegetables', suggestedUnits: ['kg', 'g', 'pc', 'bunch', 'pack'] },
+  { name: 'Dairy & Eggs', suggestedUnits: ['l', 'ml', 'pc', 'dozen', 'pack'] },
+  { name: 'Meat & Poultry', suggestedUnits: ['kg', 'g', 'pc', 'pack'] },
+  { name: 'Fish & Seafood', suggestedUnits: ['kg', 'g', 'pc'] },
+  { name: 'Grains & Pulses', suggestedUnits: ['kg', 'g', 'pack'] },
+  { name: 'Oils & Ghee', suggestedUnits: ['l', 'ml', 'bottle', 'jar'] },
+  { name: 'Spices & Masalas', suggestedUnits: ['g', 'kg', 'pack', 'bottle'] },
+  { name: 'Bakery & Snacks', suggestedUnits: ['pc', 'pack', 'box'] },
+  { name: 'Beverages', suggestedUnits: ['l', 'ml', 'bottle', 'can', 'pack'] },
+  { name: 'Frozen Foods', suggestedUnits: ['g', 'kg', 'pack'] },
+  { name: 'Personal Care', suggestedUnits: ['pc', 'bottle', 'pack'] },
+  { name: 'Household Items', suggestedUnits: ['pc', 'bottle', 'pack'] },
+  { name: 'Other', suggestedUnits: ['pc', 'pack'] },
 ];
 
 const GroceryItems = () => {
@@ -165,7 +81,7 @@ const GroceryItems = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [unicodeSearch, setUnicodeSearch] = useState('');
+  const [uploading, setUploading] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -175,7 +91,13 @@ const GroceryItems = () => {
     description: '',
     isActive: true,
     image: null,
-    unicode: '',
+    unit: 'pc',
+    quantity: 1,
+    baseUnit: 'pc',
+    baseQuantity: 1,
+    maxQuantity: 10,
+    minQuantity: 1,
+    increment: 1,
   });
 
   useEffect(() => {
@@ -196,6 +118,50 @@ const GroceryItems = () => {
     }
   };
 
+  // Get suggested units based on category
+  const getSuggestedUnits = (category) => {
+    const categoryData = GROCERY_CATEGORIES.find(cat => cat.name === category);
+    if (categoryData) {
+      return UNIT_TYPES.filter(unit => categoryData.suggestedUnits.includes(unit.value));
+    }
+    return UNIT_TYPES;
+  };
+
+  // Group units by category for better dropdown organization
+  const groupedUnits = UNIT_TYPES.reduce((acc, unit) => {
+    if (!acc[unit.category]) {
+      acc[unit.category] = [];
+    }
+    acc[unit.category].push(unit);
+    return acc;
+  }, {});
+
+  // Image compression function - 200KB max size
+  const compressImage = async (imageFile) => {
+    try {
+      const options = {
+        maxSizeMB: 0.2,
+        maxWidthOrHeight: 800,
+        useWebWorker: true,
+        fileType: 'image/jpeg',
+        initialQuality: 0.7,
+        maxIteration: 10,
+      };
+
+      const compressedFile = await imageCompression(imageFile, options);
+      const previewUrl = await imageCompression.getDataUrlFromFile(compressedFile);
+      
+      return {
+        compressedFile,
+        previewUrl
+      };
+    } catch (error) {
+      console.error('Error compressing image:', error);
+      toast.error('Error compressing image');
+      throw error;
+    }
+  };
+
   const handleOpenDialog = (item = null) => {
     if (item) {
       setEditingItem(item);
@@ -207,7 +173,14 @@ const GroceryItems = () => {
         description: item.description || '',
         isActive: item.isActive !== undefined ? item.isActive : true,
         image: null,
-        unicode: item.unicode || '',
+        unit: item.unit || 'pc',
+        quantity: item.quantity || 1,
+        baseUnit: item.baseUnit || 'pc',
+        baseQuantity: item.baseQuantity || 1,
+        maxQuantity: item.maxQuantity || 10,
+        minQuantity: item.minQuantity || 1,
+        increment: item.increment || 1,
+        imagePreview: item.image || null,
       });
     } else {
       setEditingItem(null);
@@ -219,7 +192,14 @@ const GroceryItems = () => {
         description: '',
         isActive: true,
         image: null,
-        unicode: '',
+        unit: 'pc',
+        quantity: 1,
+        baseUnit: 'pc',
+        baseQuantity: 1,
+        maxQuantity: 10,
+        minQuantity: 1,
+        increment: 1,
+        imagePreview: null,
       });
     }
     setOpenDialog(true);
@@ -228,7 +208,7 @@ const GroceryItems = () => {
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setEditingItem(null);
-    setUnicodeSearch('');
+    setUploading(false);
   };
 
   const handleInputChange = (e) => {
@@ -237,13 +217,68 @@ const GroceryItems = () => {
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
     }));
+
+    // Auto-update suggested units when category changes
+    if (name === 'category' && value) {
+      const suggestedUnits = getSuggestedUnits(value);
+      if (suggestedUnits.length > 0 && !suggestedUnits.find(unit => unit.value === formData.unit)) {
+        setFormData(prev => ({
+          ...prev,
+          unit: suggestedUnits[0].value
+        }));
+      }
+    }
   };
 
-  const handleFileChange = (e) => {
-    setFormData(prev => ({
-      ...prev,
-      image: e.target.files[0],
-    }));
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select a valid image file');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size should be less than 5MB');
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      const { compressedFile, previewUrl } = await compressImage(file);
+      
+      setFormData(prev => ({
+        ...prev,
+        image: compressedFile,
+        imagePreview: previewUrl,
+      }));
+      
+      toast.success('Image compressed successfully');
+    } catch (error) {
+      console.error('Error handling image:', error);
+      toast.error('Error processing image');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const uploadImageToFirebase = async (imageFile, itemId) => {
+    try {
+      const timestamp = Date.now();
+      const fileExtension = imageFile.name.split('.').pop();
+      const fileName = `grocery_${itemId || 'new'}_${timestamp}.${fileExtension}`;
+      
+      const storageRef = ref(storage, `grocery/${fileName}`);
+      const snapshot = await uploadBytes(storageRef, imageFile);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      
+      return downloadURL;
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      throw new Error('Failed to upload image');
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -254,9 +289,7 @@ const GroceryItems = () => {
       let imageURL = editingItem?.image || '';
 
       if (formData.image) {
-        const imageRef = ref(storage, `grocery/${Date.now()}_${formData.image.name}`);
-        const snapshot = await uploadBytes(imageRef, formData.image);
-        imageURL = await getDownloadURL(snapshot.ref);
+        imageURL = await uploadImageToFirebase(formData.image, editingItem?.id);
       }
 
       const groceryItemData = {
@@ -267,7 +300,14 @@ const GroceryItems = () => {
         description: formData.description,
         isActive: formData.isActive,
         image: imageURL,
-        unicode: formData.unicode,
+        unit: formData.unit,
+        quantity: parseFloat(formData.quantity),
+        baseUnit: formData.baseUnit,
+        baseQuantity: parseFloat(formData.baseQuantity),
+        maxQuantity: parseFloat(formData.maxQuantity),
+        minQuantity: parseFloat(formData.minQuantity),
+        increment: parseFloat(formData.increment),
+        displayQuantity: `${formData.quantity} ${formData.unit}`,
         updatedAt: new Date(),
       };
 
@@ -283,8 +323,8 @@ const GroceryItems = () => {
       handleCloseDialog();
       fetchGroceryItems();
     } catch (error) {
-      toast.error('Error saving grocery item');
-      console.error('Error:', error);
+      console.error('Error saving grocery item:', error);
+      toast.error(error.message || 'Error saving grocery item');
     }
 
     setLoading(false);
@@ -319,50 +359,41 @@ const GroceryItems = () => {
     }
   };
 
-  const groupedUnicodes = GROCERY_UNICODES.reduce((acc, item) => {
-    if (!acc[item.category]) {
-      acc[item.category] = [];
-    }
-    acc[item.category].push(item);
-    return acc;
-  }, {});
-
-  // Filter unicodes based on search
-  const getFilteredUnicodes = () => {
-    if (!unicodeSearch.trim()) {
-      return groupedUnicodes;
-    }
-
-    const searchLower = unicodeSearch.toLowerCase();
-    const filtered = {};
-
-    Object.keys(groupedUnicodes).forEach((category) => {
-      const matchingItems = groupedUnicodes[category].filter(item =>
-        item.name.toLowerCase().includes(searchLower) ||
-        item.keywords.toLowerCase().includes(searchLower)
+  // Show image preview in the form
+  const renderImagePreview = () => {
+    if (uploading) {
+      return (
+        <Box display="flex" alignItems="center" gap={1} mt={1}>
+          <CircularProgress size={20} />
+          <Typography variant="body2">Compressing image...</Typography>
+        </Box>
       );
+    }
 
-      if (matchingItems.length > 0) {
-        filtered[category] = matchingItems;
-      }
-    });
-
-    return filtered;
+    if (formData.imagePreview) {
+      return (
+        <Box mt={1}>
+          <Typography variant="body2" gutterBottom>
+            Image Preview:
+          </Typography>
+          <img 
+            src={formData.imagePreview} 
+            alt="Preview" 
+            style={{ 
+              width: 100, 
+              height: 100, 
+              objectFit: 'cover', 
+              borderRadius: 4,
+              border: '1px solid #e0e0e0'
+            }}
+          />
+        </Box>
+      );
+    }
+    return null;
   };
 
-  const filteredUnicodes = getFilteredUnicodes();
-
   const columns = [
-    { 
-      field: 'unicode', 
-      headerName: 'Icon', 
-      width: 70,
-      renderCell: (params) => (
-        <Typography variant="h4" sx={{ textAlign: 'center' }}>
-          {params.value || '📦'}
-        </Typography>
-      ),
-    },
     { 
       field: 'image', 
       headerName: 'Image', 
@@ -380,7 +411,20 @@ const GroceryItems = () => {
       ),
     },
     { field: 'name', headerName: 'Name', width: 180 },
-    { field: 'category', headerName: 'Category', width: 130 },
+    { field: 'category', headerName: 'Category', width: 150 },
+    { 
+      field: 'displayQuantity', 
+      headerName: 'Quantity', 
+      width: 120,
+      renderCell: (params) => (
+        <Chip
+          label={params.value}
+          color="primary"
+          variant="outlined"
+          size="small"
+        />
+      ),
+    },
     { 
       field: 'price', 
       headerName: 'Price', 
@@ -479,88 +523,6 @@ const GroceryItems = () => {
         <form onSubmit={handleSubmit}>
           <DialogContent>
             <Grid container spacing={2}>
-              <Grid item xs={12}>
-                <FormControl fullWidth margin="normal">
-                  <InputLabel>Select Icon (Unicode)</InputLabel>
-                  <Select
-                    name="unicode"
-                    value={formData.unicode}
-                    onChange={handleInputChange}
-                    label="Select Icon (Unicode)"
-                    MenuProps={{
-                      PaperProps: {
-                        style: {
-                          maxHeight: 450,
-                        },
-                      },
-                      autoFocus: false,
-                    }}
-                    renderValue={(selected) => (
-                      <Box display="flex" alignItems="center" gap={1}>
-                        <Typography variant="h6">{selected}</Typography>
-                        <Typography>
-                          {GROCERY_UNICODES.find(u => u.unicode === selected)?.name || 'Select an icon'}
-                        </Typography>
-                      </Box>
-                    )}
-                  >
-                    <Box 
-                      sx={{ 
-                        p: 2, 
-                        position: 'sticky', 
-                        top: 0, 
-                        backgroundColor: 'white', 
-                        zIndex: 1,
-                        borderBottom: '1px solid #e0e0e0'
-                      }}
-                      onKeyDown={(e) => e.stopPropagation()}
-                    >
-                      <TextField
-                        fullWidth
-                        size="small"
-                        placeholder="🔍 Search by name (e.g., tomato, rice, masala)..."
-                        value={unicodeSearch}
-                        onChange={(e) => setUnicodeSearch(e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        autoFocus={false}
-                        InputProps={{
-                          sx: { backgroundColor: '#f5f5f5' }
-                        }}
-                      />
-                    </Box>
-                    {Object.keys(filteredUnicodes).length === 0 ? (
-                      <MenuItem disabled>
-                        <Typography color="textSecondary">No items found</Typography>
-                      </MenuItem>
-                    ) : (
-                      Object.keys(filteredUnicodes).map((category) => [
-                        <MenuItem 
-                          key={category} 
-                          disabled 
-                          sx={{ 
-                            fontWeight: 'bold', 
-                            backgroundColor: '#f5f5f5',
-                            '&.Mui-disabled': {
-                              opacity: 1
-                            }
-                          }}
-                        >
-                          {category}
-                        </MenuItem>,
-                        ...filteredUnicodes[category].map((item) => (
-                          <MenuItem key={item.unicode + item.name} value={item.unicode}>
-                            <Box display="flex" alignItems="center" gap={2}>
-                              <Typography variant="h5">{item.unicode}</Typography>
-                              <Typography>{item.name}</Typography>
-                            </Box>
-                          </MenuItem>
-                        ))
-                      ])
-                    )}
-                  </Select>
-                </FormControl>
-              </Grid>
-
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
@@ -573,16 +535,75 @@ const GroceryItems = () => {
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
+                <FormControl fullWidth margin="normal">
+                  <InputLabel>Category</InputLabel>
+                  <Select
+                    name="category"
+                    value={formData.category}
+                    onChange={handleInputChange}
+                    label="Category"
+                    required
+                  >
+                    {GROCERY_CATEGORIES.map((category) => (
+                      <MenuItem key={category.name} value={category.name}>
+                        {category.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {/* Quantity and Unit Section */}
+              <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Category"
-                  name="category"
-                  value={formData.category}
+                  label="Quantity"
+                  name="quantity"
+                  type="number"
+                  value={formData.quantity}
                   onChange={handleInputChange}
                   required
                   margin="normal"
+                  inputProps={{ step: '0.01', min: '0.01' }}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <FormControl sx={{ minWidth: 120 }} size="small">
+                          <Select
+                            name="unit"
+                            value={formData.unit}
+                            onChange={handleInputChange}
+                            sx={{ border: 'none', '& fieldset': { border: 'none' } }}
+                          >
+                            {Object.keys(groupedUnits).map((category) => [
+                              <MenuItem 
+                                key={category} 
+                                disabled 
+                                sx={{ 
+                                  fontWeight: 'bold', 
+                                  backgroundColor: '#f5f5f5',
+                                  '&.Mui-disabled': { opacity: 1 }
+                                }}
+                              >
+                                {category}
+                              </MenuItem>,
+                              ...groupedUnits[category].map((unit) => (
+                                <MenuItem key={unit.value} value={unit.value}>
+                                  {unit.label}
+                                </MenuItem>
+                              ))
+                            ])}
+                          </Select>
+                        </FormControl>
+                      </InputAdornment>
+                    ),
+                  }}
                 />
+                <Typography variant="caption" color="textSecondary">
+                  Displayed as: {formData.quantity} {formData.unit}
+                </Typography>
               </Grid>
+
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
@@ -594,8 +615,56 @@ const GroceryItems = () => {
                   required
                   margin="normal"
                   inputProps={{ step: '0.01', min: '0' }}
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                  }}
+                />
+                <Typography variant="caption" color="textSecondary">
+                  Price for {formData.quantity} {formData.unit}
+                </Typography>
+              </Grid>
+
+              {/* Quantity Settings */}
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  label="Min Quantity"
+                  name="minQuantity"
+                  type="number"
+                  value={formData.minQuantity}
+                  onChange={handleInputChange}
+                  required
+                  margin="normal"
+                  inputProps={{ step: '0.01', min: '0.01' }}
                 />
               </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  label="Max Quantity"
+                  name="maxQuantity"
+                  type="number"
+                  value={formData.maxQuantity}
+                  onChange={handleInputChange}
+                  required
+                  margin="normal"
+                  inputProps={{ step: '0.01', min: '0.01' }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  label="Quantity Increment"
+                  name="increment"
+                  type="number"
+                  value={formData.increment}
+                  onChange={handleInputChange}
+                  required
+                  margin="normal"
+                  inputProps={{ step: '0.01', min: '0.01' }}
+                />
+              </Grid>
+
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
@@ -609,6 +678,7 @@ const GroceryItems = () => {
                   inputProps={{ min: '0' }}
                 />
               </Grid>
+
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -621,25 +691,34 @@ const GroceryItems = () => {
                   margin="normal"
                 />
               </Grid>
+
               <Grid item xs={12}>
-                <input
-                  accept="image/*"
-                  type="file"
-                  onChange={handleFileChange}
-                  style={{ display: 'none' }}
-                  id="grocery-image-upload"
-                />
-                <label htmlFor="grocery-image-upload">
-                  <Button variant="outlined" component="span">
-                    Upload Image (Optional)
-                  </Button>
-                </label>
-                {formData.image && (
-                  <Typography variant="body2" sx={{ ml: 2, display: 'inline' }}>
-                    {formData.image.name}
+                <Box>
+                  <input
+                    accept="image/*"
+                    type="file"
+                    onChange={handleFileChange}
+                    style={{ display: 'none' }}
+                    id="grocery-image-upload"
+                    disabled={uploading}
+                  />
+                  <label htmlFor="grocery-image-upload">
+                    <Button 
+                      variant="outlined" 
+                      component="span"
+                      disabled={uploading}
+                      startIcon={uploading ? <CircularProgress size={16} /> : null}
+                    >
+                      {uploading ? 'Compressing...' : 'Upload Image (Optional)'}
+                    </Button>
+                  </label>
+                  <Typography variant="caption" display="block" sx={{ mt: 1, color: 'text.secondary' }}>
+                    Max file size: 5MB | Compressed to: 200KB | Supported formats: JPG, PNG, WebP
                   </Typography>
-                )}
+                  {renderImagePreview()}
+                </Box>
               </Grid>
+
               <Grid item xs={12}>
                 <FormControlLabel
                   control={
@@ -655,8 +734,15 @@ const GroceryItems = () => {
             </Grid>
           </DialogContent>
           <DialogActions>
-            <Button onClick={handleCloseDialog}>Cancel</Button>
-            <Button type="submit" variant="contained" disabled={loading}>
+            <Button onClick={handleCloseDialog} disabled={loading}>
+              Cancel
+            </Button>
+            <Button 
+              type="submit" 
+              variant="contained" 
+              disabled={loading || uploading}
+              startIcon={loading ? <CircularProgress size={16} /> : null}
+            >
               {loading ? 'Saving...' : editingItem ? 'Update' : 'Add'}
             </Button>
           </DialogActions>
