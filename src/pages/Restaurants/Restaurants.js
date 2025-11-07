@@ -23,6 +23,11 @@ import {
   Select,
   FormControl,
   InputLabel,
+  InputAdornment,
+  Badge,
+  Tooltip,
+  Alert,
+  FormGroup,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -32,6 +37,14 @@ import {
   Restaurant as RestaurantIcon,
   MenuBook as MenuBookIcon,
   ArrowBack as ArrowBackIcon,
+  DeliveryDining as DeliveryIcon,
+  TakeoutDining as TakeoutIcon,
+  Star as StarIcon,
+  CloudUpload as UploadIcon,
+  Email as EmailIcon,
+  Phone as PhoneIcon,
+  LocationOn as LocationIcon,
+  Schedule as ScheduleIcon,
 } from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -53,21 +66,57 @@ const Restaurants = () => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [menuAnchorEl, setMenuAnchorEl] = useState(null);
   const [unicodeSearch, setUnicodeSearch] = useState('');
+  const [activeTab, setActiveTab] = useState(0);
 
+  // Enhanced form data with all required fields
   const [formData, setFormData] = useState({
+    // Basic Info
     name: '',
-    address: '',
+    description: '',
+    cuisine: '',
+    tags: [],
+    
+    // Contact Info
     ownerEmail: '',
     contact: '',
     ownerPhone: '',
-    cuisine: '',
-    deliveryTime: '',
-    rating: '',
-    image: '🍽️',
+    address: '',
+    city: '',
+    state: '',
+    pincode: '',
+    
+    // Business Hours
+    openingTime: '09:00',
+    closingTime: '23:00',
+    workingDays: [0, 1, 2, 3, 4, 5, 6], // All days by default
+    
+    // Service Settings
+    deliveryAvailable: true,
+    takeawayAvailable: true,
+    dineInAvailable: false,
+    currentlyAcceptingOrders: true,
+    deliveryRadius: 5, // in km
+    deliveryFee: 0,
+    packagingFee: 0,
+    
+    // Status & Ratings
     status: 'active',
     isActive: true,
+    featured: false,
+    rating: '4.0',
+    totalRatings: 0,
+    preparationTime: '25-30',
+    
+    // Media
     logo: null,
     logoPreview: '',
+    
+    // Financial
+    commissionRate: 15,
+    taxRate: 5,
+    
+    // Verification
+    verified: false,
   });
 
   const [menuFormData, setMenuFormData] = useState({
@@ -76,218 +125,88 @@ const Restaurants = () => {
     price: '',
     description: '',
     available: true,
-    image: '',
+    image: '🍛',
     imageFile: null,
     imagePreview: '',
   });
 
-  // Menu categories
-  const menuCategories = [
-    'Appetizers',
-    'Main Course',
-    'Biryani',
-    'Breads',
-    'Rice',
-    'Chinese',
-    'South Indian',
-    'Desserts',
-    'Beverages',
-    'Snacks'
+  // Days of week
+  const daysOfWeek = [
+    { id: 0, name: 'Sunday' },
+    { id: 1, name: 'Monday' },
+    { id: 2, name: 'Tuesday' },
+    { id: 3, name: 'Wednesday' },
+    { id: 4, name: 'Thursday' },
+    { id: 5, name: 'Friday' },
+    { id: 6, name: 'Saturday' },
   ];
 
+  // Time slots
+  const timeSlots = [];
+  for (let hour = 0; hour < 24; hour++) {
+    for (let minute = 0; minute < 60; minute += 30) {
+      const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+      timeSlots.push(timeString);
+    }
+  }
+
+  // Cuisine types
+  const cuisineTypes = [
+    'North Indian', 'South Indian', 'Chinese', 'Italian', 'Mexican',
+    'Continental', 'Thai', 'Japanese', 'American', 'Arabian',
+    'Bengali', 'Gujarati', 'Punjabi', 'Rajasthani', 'Mughlai',
+    'Fast Food', 'Desserts', 'Beverages', 'Street Food', 'Bakery'
+  ];
+
+  // Restaurant tags
+  const restaurantTags = [
+    'Pure Veg', 'Non-Veg', 'Eggitarian', 'Best Seller', 'Trending',
+    'Family Restaurant', 'Fine Dining', 'Quick Bite', 'Budget Friendly',
+    'Luxury Dining', 'Rooftop', 'Live Music', 'Outdoor Seating',
+    'Free WiFi', 'Parking Available', 'Wheelchair Accessible'
+  ];
+
+  // Menu categories
+  const menuCategories = [
+    'Appetizers', 'Main Course', 'Biryani', 'Breads', 'Rice',
+    'Chinese', 'South Indian', 'Desserts', 'Beverages', 'Snacks',
+    'Salads', 'Soups', 'Pizza', 'Burger', 'Sandwiches',
+    'Pasta', 'Seafood', 'Grill', 'Thali', 'Combos'
+  ];
+
+  // Food emojis for menu items
   const FOOD_EMOJIS = [
-  // South Indian
-  { name: 'Idli', unicode: '⚪', keywords: 'idli south indian breakfast steamed' },
-  { name: 'Dosa', unicode: '🫓', keywords: 'dosa south indian crispy crepe' },
-  { name: 'Masala Dosa', unicode: '🥙', keywords: 'masala dosa south indian' },
-  { name: 'Vada', unicode: '🍩', keywords: 'vada medu vada south indian' },
-  { name: 'Uttapam', unicode: '🥞', keywords: 'uttapam south indian pancake' },
-  { name: 'Upma', unicode: '🍚', keywords: 'upma south indian breakfast' },
-  { name: 'Pongal', unicode: '🥘', keywords: 'pongal south indian rice' },
-  { name: 'Sambar', unicode: '🥣', keywords: 'sambar south indian lentil curry' },
-  { name: 'Rasam', unicode: '🍵', keywords: 'rasam south indian soup' },
-  { name: 'Idiyappam', unicode: '🍜', keywords: 'idiyappam string hoppers south indian' },
-  { name: 'Appam', unicode: '🫔', keywords: 'appam kerala south indian' },
-  { name: 'Puttu', unicode: '🧊', keywords: 'puttu kerala south indian' },
-  { name: 'Bisi Bele Bath', unicode: '🍲', keywords: 'bisi bele bath karnataka rice' },
-  { name: 'Lemon Rice', unicode: '🍋', keywords: 'lemon rice south indian' },
-  { name: 'Curd Rice', unicode: '🥛', keywords: 'curd rice thayir sadam south indian' },
-  { name: 'Coconut Chutney', unicode: '🥥', keywords: 'coconut chutney south indian' },
-  { name: 'Payasam', unicode: '🍮', keywords: 'payasam kheer south indian dessert' },
-  
-  // North Indian Curries
-  { name: 'Butter Chicken', unicode: '🍗', keywords: 'butter chicken murgh makhani curry' },
-  { name: 'Chicken Curry', unicode: '🍛', keywords: 'chicken curry gravy' },
-  { name: 'Mutton Curry', unicode: '🍖', keywords: 'mutton curry lamb goat' },
-  { name: 'Paneer Butter Masala', unicode: '🧀', keywords: 'paneer butter masala curry' },
-  { name: 'Dal Makhani', unicode: '🫘', keywords: 'dal makhani black lentils curry' },
-  { name: 'Dal Tadka', unicode: '🥄', keywords: 'dal tadka yellow lentils' },
-  { name: 'Rajma', unicode: '🫛', keywords: 'rajma kidney beans curry' },
-  { name: 'Chole', unicode: '🟡', keywords: 'chole chickpeas chana masala' },
-  { name: 'Kadai Paneer', unicode: '🥘', keywords: 'kadai paneer curry' },
-  { name: 'Palak Paneer', unicode: '🥬', keywords: 'palak paneer spinach curry' },
-  { name: 'Paneer Tikka Masala', unicode: '🟠', keywords: 'paneer tikka masala' },
-  { name: 'Shahi Paneer', unicode: '🟨', keywords: 'shahi paneer royal curry' },
-  { name: 'Malai Kofta', unicode: '⚪', keywords: 'malai kofta curry dumplings' },
-  { name: 'Korma', unicode: '🥣', keywords: 'korma curry creamy' },
-  { name: 'Rogan Josh', unicode: '🔴', keywords: 'rogan josh kashmiri curry' },
-  
-  // Biryani & Rice
-  { name: 'Biryani', unicode: '🍱', keywords: 'biryani rice hyderabadi' },
-  { name: 'Chicken Biryani', unicode: '🍛', keywords: 'chicken biryani rice' },
-  { name: 'Mutton Biryani', unicode: '🥙', keywords: 'mutton biryani rice' },
-  { name: 'Veg Biryani', unicode: '🍲', keywords: 'veg biryani vegetarian rice' },
-  { name: 'Dum Biryani', unicode: '🫕', keywords: 'dum biryani slow cooked' },
-  { name: 'Pulao', unicode: '🍚', keywords: 'pulao pilaf rice' },
-  { name: 'Jeera Rice', unicode: '🌾', keywords: 'jeera rice cumin' },
-  { name: 'Fried Rice', unicode: '🥡', keywords: 'fried rice chinese' },
-  
-  // Breads
-  { name: 'Naan', unicode: '🫓', keywords: 'naan bread tandoor' },
-  { name: 'Roti', unicode: '🥖', keywords: 'roti chapati bread' },
-  { name: 'Paratha', unicode: '🥞', keywords: 'paratha layered bread' },
-  { name: 'Kulcha', unicode: '🥐', keywords: 'kulcha stuffed naan' },
-  { name: 'Butter Naan', unicode: '🧈', keywords: 'butter naan bread' },
-  { name: 'Garlic Naan', unicode: '🧄', keywords: 'garlic naan bread' },
-  { name: 'Puri', unicode: '🫔', keywords: 'puri poori fried bread' },
-  { name: 'Bhatura', unicode: '🥯', keywords: 'bhatura chole bhature bread' },
-  { name: 'Roomali Roti', unicode: '📜', keywords: 'roomali roti thin bread' },
-  
-  // Starters/Appetizers
-  { name: 'Samosa', unicode: '🥟', keywords: 'samosa starter snack fried' },
-  { name: 'Pakora', unicode: '🧆', keywords: 'pakora bhaji fritters' },
-  { name: 'Spring Roll', unicode: '🌯', keywords: 'spring roll chinese starter' },
-  { name: 'Paneer Tikka', unicode: '🍢', keywords: 'paneer tikka tandoor starter' },
-  { name: 'Chicken Tikka', unicode: '🍡', keywords: 'chicken tikka tandoor starter' },
-  { name: 'Kebab', unicode: ' 串', keywords: 'kebab seekh starter' },
-  { name: 'Tandoori Chicken', unicode: '🍗', keywords: 'tandoori chicken starter' },
-  { name: 'Chicken Wings', unicode: '🍖', keywords: 'chicken wings starter' },
-  { name: 'Fish Fry', unicode: '🐟', keywords: 'fish fry starter' },
-  { name: 'Prawn Fry', unicode: '🦐', keywords: 'prawn shrimp fry starter' },
-  { name: 'Chicken 65', unicode: '🔥', keywords: 'chicken 65 starter spicy' },
-  { name: 'Gobi 65', unicode: '🥦', keywords: 'gobi 65 cauliflower starter' },
-  { name: 'Paneer 65', unicode: '🟧', keywords: 'paneer 65 starter' },
-  { name: 'Cutlet', unicode: '🥙', keywords: 'cutlet veg potato starter' },
-  { name: 'Aloo Tikki', unicode: '🥔', keywords: 'aloo tikki potato starter' },
-  { name: 'Onion Rings', unicode: '🧅', keywords: 'onion rings fried starter' },
-  { name: 'French Fries', unicode: '🍟', keywords: 'french fries potato' },
-  { name: 'Nachos', unicode: '🌮', keywords: 'nachos chips starter' },
-  { name: 'Garlic Bread', unicode: '🥖', keywords: 'garlic bread starter' },
-  
-  // Chinese
-  { name: 'Noodles', unicode: '🍝', keywords: 'noodles hakka chinese' },
-  { name: 'Chow Mein', unicode: '🥢', keywords: 'chow mein noodles chinese' },
-  { name: 'Manchurian', unicode: '🥘', keywords: 'manchurian chinese gravy' },
-  { name: 'Schezwan Fried Rice', unicode: '🍚', keywords: 'fried rice chinese schezwan' },
-  { name: 'Momos', unicode: '🥟', keywords: 'momos dumplings chinese tibetan' },
-  { name: 'Chilli Chicken', unicode: '🌶️', keywords: 'chilli chicken chinese spicy' },
-  { name: 'Chilli Paneer', unicode: '🌶️', keywords: 'chilli paneer chinese' },
-  { name: 'Sweet & Sour', unicode: '🍲', keywords: 'sweet sour chinese' },
-  { name: 'Schezwan Sauce', unicode: '🔴', keywords: 'schezwan spicy chinese' },
-  { name: 'Hot & Sour Soup', unicode: '🥣', keywords: 'soup hot sour chinese' },
-  { name: 'Hakka Noodles', unicode: '🍜', keywords: 'hakka noodles chinese' },
-  
-  // American/Continental
-  { name: 'Burger', unicode: '🍔', keywords: 'burger american fast food' },
-  { name: 'Pizza', unicode: '🍕', keywords: 'pizza italian cheese' },
-  { name: 'Sandwich', unicode: '🥪', keywords: 'sandwich bread' },
-  { name: 'Hot Dog', unicode: '🌭', keywords: 'hot dog american' },
-  { name: 'Pasta', unicode: '🍝', keywords: 'pasta italian spaghetti' },
-  { name: 'Mac & Cheese', unicode: '🧀', keywords: 'mac cheese macaroni pasta' },
-  { name: 'Steak', unicode: '🥩', keywords: 'steak beef meat' },
-  { name: 'Grilled Chicken', unicode: '🍗', keywords: 'grilled chicken' },
-  { name: 'Wrap', unicode: '🌯', keywords: 'wrap roll sandwich' },
-  { name: 'Taco', unicode: '🌮', keywords: 'taco mexican' },
-  { name: 'Burrito', unicode: '🌯', keywords: 'burrito mexican wrap' },
-  { name: 'Quesadilla', unicode: '🫔', keywords: 'quesadilla mexican' },
-  { name: 'Sushi', unicode: '🍣', keywords: 'sushi japanese' },
-  { name: 'Ramen', unicode: '🍜', keywords: 'ramen japanese noodles' },
-  
-  // Snacks
-  { name: 'Pav Bhaji', unicode: '🍞', keywords: 'pav bhaji mumbai street food' },
-  { name: 'Vada Pav', unicode: '🥙', keywords: 'vada pav mumbai burger' },
-  { name: 'Pani Puri', unicode: '💧', keywords: 'pani puri golgappa street food' },
-  { name: 'Bhel Puri', unicode: '🥗', keywords: 'bhel puri chaat street food' },
-  { name: 'Sev Puri', unicode: '🫒', keywords: 'sev puri chaat street food' },
-  { name: 'Dahi Puri', unicode: '🥛', keywords: 'dahi puri chaat street food' },
-  { name: 'Chaat', unicode: '🍲', keywords: 'chaat street food snack' },
-  { name: 'Kachori', unicode: '🟤', keywords: 'kachori fried snack' },
-  { name: 'Popcorn', unicode: '🍿', keywords: 'popcorn snack' },
-  { name: 'Chips', unicode: '🥔', keywords: 'chips potato snack' },
-  
-  // Desserts
-  { name: 'Ice Cream', unicode: '🍨', keywords: 'ice cream dessert' },
-  { name: 'Gulab Jamun', unicode: '🍡', keywords: 'gulab jamun sweet dessert' },
-  { name: 'Rasgulla', unicode: '⚪', keywords: 'rasgulla sweet dessert' },
-  { name: 'Jalebi', unicode: '🟠', keywords: 'jalebi sweet dessert' },
-  { name: 'Kheer', unicode: '🥛', keywords: 'kheer payasam rice pudding' },
-  { name: 'Halwa', unicode: '🟫', keywords: 'halwa sweet dessert' },
-  { name: 'Ladoo', unicode: '🟡', keywords: 'ladoo sweet dessert' },
-  { name: 'Barfi', unicode: '🟨', keywords: 'barfi sweet dessert' },
-  { name: 'Kulfi', unicode: '🍦', keywords: 'kulfi indian ice cream' },
-  { name: 'Cake', unicode: '🍰', keywords: 'cake dessert pastry' },
-  { name: 'Pastry', unicode: '🥐', keywords: 'pastry dessert bakery' },
-  { name: 'Brownie', unicode: '🍫', keywords: 'brownie chocolate dessert' },
-  { name: 'Cookie', unicode: '🍪', keywords: 'cookie biscuit dessert' },
-  { name: 'Donut', unicode: '🍩', keywords: 'donut doughnut dessert' },
-  { name: 'Cupcake', unicode: '🧁', keywords: 'cupcake muffin dessert' },
-  { name: 'Pudding', unicode: '🍮', keywords: 'pudding dessert' },
-  { name: 'Cheesecake', unicode: '🎂', keywords: 'cheesecake dessert' },
-  
-  // Beverages
-  { name: 'Tea', unicode: '🍵', keywords: 'tea chai hot beverage' },
-  { name: 'Coffee', unicode: '☕', keywords: 'coffee hot beverage' },
-  { name: 'Masala Chai', unicode: '🫖', keywords: 'masala chai tea indian' },
-  { name: 'Filter Coffee', unicode: '☕', keywords: 'filter coffee south indian' },
-  { name: 'Lassi', unicode: '🥤', keywords: 'lassi yogurt drink punjabi' },
-  { name: 'Buttermilk', unicode: '🥛', keywords: 'buttermilk chaas drink' },
-  { name: 'Milkshake', unicode: '🥤', keywords: 'milkshake shake beverage' },
-  { name: 'Smoothie', unicode: '🧋', keywords: 'smoothie fruit drink' },
-  { name: 'Fresh Juice', unicode: '🧃', keywords: 'juice fresh fruit' },
-  { name: 'Soft Drink', unicode: '🥤', keywords: 'soft drink soda cola' },
-  { name: 'Mojito', unicode: '🍹', keywords: 'mojito mocktail drink' },
-  { name: 'Lemonade', unicode: '🍋', keywords: 'lemonade nimbu pani drink' },
-  { name: 'Coconut Water', unicode: '🥥', keywords: 'coconut water drink' },
-  { name: 'Sugarcane Juice', unicode: '🧃', keywords: 'sugarcane juice drink' },
-  { name: 'Beer', unicode: '🍺', keywords: 'beer alcohol beverage' },
-  { name: 'Wine', unicode: '🍷', keywords: 'wine alcohol beverage' },
-  { name: 'Cocktail', unicode: '🍸', keywords: 'cocktail drink alcohol' },
-  
-  // Seafood
-  { name: 'Fish Curry', unicode: '🐟', keywords: 'fish curry seafood' },
-  { name: 'Prawn Curry', unicode: '🦐', keywords: 'prawn shrimp curry seafood' },
-  { name: 'Crab', unicode: '🦀', keywords: 'crab seafood' },
-  { name: 'Lobster', unicode: '🦞', keywords: 'lobster seafood' },
-  { name: 'Fish Fillet', unicode: '🐠', keywords: 'fish fillet grilled' },
-  
-  // Salads
-  { name: 'Green Salad', unicode: '🥗', keywords: 'green salad vegetables healthy' },
-  { name: 'Caesar Salad', unicode: '🥙', keywords: 'caesar salad' },
-  { name: 'Fruit Salad', unicode: '🍇', keywords: 'fruit salad fresh' },
-  { name: 'Raita', unicode: '🥣', keywords: 'raita yogurt side dish' },
-  
-  // Eggs
-  { name: 'Omelette', unicode: '🍳', keywords: 'omelette egg breakfast' },
-  { name: 'Boiled Egg', unicode: '🥚', keywords: 'boiled egg' },
-  { name: 'Fried Egg', unicode: '🍳', keywords: 'fried egg sunny side' },
-  { name: 'Egg Curry', unicode: '🥚', keywords: 'egg curry gravy' },
-  { name: 'Scrambled Eggs', unicode: '🍳', keywords: 'scrambled eggs breakfast' },
-  
-  // Misc
-  { name: 'Thali', unicode: '🍱', keywords: 'thali complete meal indian' },
-  { name: 'Bowl', unicode: '🥣', keywords: 'bowl soup dal' },
-  { name: 'Plate', unicode: '🍽️', keywords: 'plate dish meal' },
-];
+    { name: 'Biryani', unicode: '🍱', keywords: 'biryani rice hyderabadi' },
+    { name: 'Curry', unicode: '🍛', keywords: 'curry gravy indian' },
+    { name: 'Pizza', unicode: '🍕', keywords: 'pizza italian cheese' },
+    { name: 'Burger', unicode: '🍔', keywords: 'burger american fast food' },
+    { name: 'Noodles', unicode: '🍝', keywords: 'noodles chinese pasta' },
+    { name: 'Dosa', unicode: '🫓', keywords: 'dosa south indian crispy' },
+    { name: 'Idli', unicode: '⚪', keywords: 'idli south indian breakfast' },
+    { name: 'Soup', unicode: '🍲', keywords: 'soup hot bowl' },
+    { name: 'Salad', unicode: '🥗', keywords: 'salad healthy vegetables' },
+    { name: 'Ice Cream', unicode: '🍨', keywords: 'ice cream dessert cold' },
+    { name: 'Coffee', unicode: '☕', keywords: 'coffee hot beverage' },
+    { name: 'Tea', unicode: '🍵', keywords: 'tea chai hot' },
+    { name: 'Juice', unicode: '🧃', keywords: 'juice fresh fruit' },
+    { name: 'Sandwich', unicode: '🥪', keywords: 'sandwich bread' },
+    { name: 'Fries', unicode: '🍟', keywords: 'fries potato snack' },
+    { name: 'Chicken', unicode: '🍗', keywords: 'chicken meat nonveg' },
+    { name: 'Fish', unicode: '🐟', keywords: 'fish seafood' },
+    { name: 'Vegetables', unicode: '🥦', keywords: 'vegetables veg healthy' },
+    { name: 'Rice', unicode: '🍚', keywords: 'rice grain' },
+    { name: 'Bread', unicode: '🥖', keywords: 'bread roti naan' },
+  ];
 
   useEffect(() => {
     fetchRestaurants();
   }, []);
 
   useEffect(() => {
-    if (selectedRestaurant) {
+    if (selectedRestaurant && viewingMenus) {
       fetchMenuItems(selectedRestaurant.id);
     }
-  }, [selectedRestaurant]);
+  }, [selectedRestaurant, viewingMenus]);
 
   const fetchRestaurants = async () => {
     try {
@@ -318,38 +237,92 @@ const Restaurants = () => {
     if (restaurant) {
       setEditingRestaurant(restaurant);
       setFormData({
+        // Basic Info
         name: restaurant.name || '',
-        address: restaurant.address || '',
+        description: restaurant.description || '',
+        cuisine: restaurant.cuisine || '',
+        tags: restaurant.tags || [],
+        
+        // Contact Info
         ownerEmail: restaurant.ownerEmail || '',
         contact: restaurant.contact || '',
         ownerPhone: restaurant.ownerPhone || '',
-        cuisine: restaurant.cuisine || '',
-        deliveryTime: restaurant.deliveryTime || '',
-        rating: restaurant.rating || '',
-        image: restaurant.image || '🍽️',
+        address: restaurant.address || '',
+        city: restaurant.city || '',
+        state: restaurant.state || '',
+        pincode: restaurant.pincode || '',
+        
+        // Business Hours
+        openingTime: restaurant.openingTime || '09:00',
+        closingTime: restaurant.closingTime || '23:00',
+        workingDays: restaurant.workingDays || [0, 1, 2, 3, 4, 5, 6],
+        
+        // Service Settings
+        deliveryAvailable: restaurant.deliveryAvailable !== undefined ? restaurant.deliveryAvailable : true,
+        takeawayAvailable: restaurant.takeawayAvailable !== undefined ? restaurant.takeawayAvailable : true,
+        dineInAvailable: restaurant.dineInAvailable || false,
+        currentlyAcceptingOrders: restaurant.currentlyAcceptingOrders !== undefined ? restaurant.currentlyAcceptingOrders : true,
+        deliveryRadius: restaurant.deliveryRadius || 5,
+        deliveryFee: restaurant.deliveryFee || 0,
+        packagingFee: restaurant.packagingFee || 0,
+        
+        // Status & Ratings
         status: restaurant.status || 'active',
         isActive: restaurant.isActive !== undefined ? restaurant.isActive : true,
+        featured: restaurant.featured || false,
+        rating: restaurant.rating || '4.0',
+        totalRatings: restaurant.totalRatings || 0,
+        preparationTime: restaurant.preparationTime || '25-30',
+        
+        // Media
         logo: null,
         logoPreview: restaurant.logo || '',
+        
+        // Financial
+        commissionRate: restaurant.commissionRate || 15,
+        taxRate: restaurant.taxRate || 5,
+        
+        // Verification
+        verified: restaurant.verified || false,
       });
     } else {
       setEditingRestaurant(null);
       setFormData({
         name: '',
-        address: '',
+        description: '',
+        cuisine: '',
+        tags: [],
         ownerEmail: '',
         contact: '',
         ownerPhone: '',
-        cuisine: '',
-        deliveryTime: '',
-        rating: '4.0',
-        image: '🍽️',
+        address: '',
+        city: '',
+        state: '',
+        pincode: '',
+        openingTime: '09:00',
+        closingTime: '23:00',
+        workingDays: [0, 1, 2, 3, 4, 5, 6],
+        deliveryAvailable: true,
+        takeawayAvailable: true,
+        dineInAvailable: false,
+        currentlyAcceptingOrders: true,
+        deliveryRadius: 5,
+        deliveryFee: 0,
+        packagingFee: 0,
         status: 'active',
         isActive: true,
+        featured: false,
+        rating: '4.0',
+        totalRatings: 0,
+        preparationTime: '25-30',
         logo: null,
         logoPreview: '',
+        commissionRate: 15,
+        taxRate: 5,
+        verified: false,
       });
     }
+    setActiveTab(0);
     setOpenDialog(true);
   };
 
@@ -410,6 +383,23 @@ const Restaurants = () => {
     }));
   };
 
+  const handleArrayInputChange = (field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleFileChange = (field, file) => {
+    if (file) {
+      setFormData(prev => ({
+        ...prev,
+        [field]: file,
+        [`${field}Preview`]: URL.createObjectURL(file),
+      }));
+    }
+  };
+
   const handleMenuImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -421,22 +411,11 @@ const Restaurants = () => {
     }
   };
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setFormData(prev => ({
-        ...prev,
-        logo: file,
-        logoPreview: URL.createObjectURL(file),
-      }));
-    }
-  };
-
-  const uploadImage = async (file) => {
+  const uploadImage = async (file, path) => {
     if (!file) return null;
     
     try {
-      const storageRef = ref(storage, `restaurants/${Date.now()}_${file.name}`);
+      const storageRef = ref(storage, `${path}/${Date.now()}_${file.name}`);
       const snapshot = await uploadBytes(storageRef, file);
       const downloadURL = await getDownloadURL(snapshot.ref);
       return downloadURL;
@@ -453,23 +432,65 @@ const Restaurants = () => {
     try {
       let logoURL = editingRestaurant?.logo || '';
 
+      // Upload logo if provided
       if (formData.logo) {
-        logoURL = await uploadImage(formData.logo);
+        try {
+          logoURL = await uploadImage(formData.logo, 'restaurants/logo');
+          toast.success('Logo uploaded successfully');
+        } catch (uploadError) {
+          console.error('Logo upload failed:', uploadError);
+          toast.warning('Logo upload failed, saving restaurant without logo');
+        }
       }
 
       const restaurantData = {
+        // Basic Info
         name: formData.name,
-        address: formData.address,
+        description: formData.description,
+        cuisine: formData.cuisine,
+        tags: formData.tags,
+        
+        // Contact Info
         ownerEmail: formData.ownerEmail,
         contact: formData.contact,
         ownerPhone: formData.ownerPhone,
-        cuisine: formData.cuisine,
-        deliveryTime: formData.deliveryTime,
-        rating: parseFloat(formData.rating) || 4.0,
-        image: formData.image,
+        address: formData.address,
+        city: formData.city,
+        state: formData.state,
+        pincode: formData.pincode,
+        
+        // Business Hours
+        openingTime: formData.openingTime,
+        closingTime: formData.closingTime,
+        workingDays: formData.workingDays,
+        
+        // Service Settings
+        deliveryAvailable: formData.deliveryAvailable,
+        takeawayAvailable: formData.takeawayAvailable,
+        dineInAvailable: formData.dineInAvailable,
+        currentlyAcceptingOrders: formData.currentlyAcceptingOrders,
+        deliveryRadius: parseFloat(formData.deliveryRadius) || 5,
+        deliveryFee: parseFloat(formData.deliveryFee) || 0,
+        packagingFee: parseFloat(formData.packagingFee) || 0,
+        
+        // Status & Ratings
         status: formData.status,
         isActive: formData.isActive,
+        featured: formData.featured,
+        rating: parseFloat(formData.rating) || 4.0,
+        totalRatings: parseInt(formData.totalRatings) || 0,
+        preparationTime: formData.preparationTime,
+        
+        // Media
         logo: logoURL,
+        
+        // Financial
+        commissionRate: parseFloat(formData.commissionRate) || 15,
+        taxRate: parseFloat(formData.taxRate) || 5,
+        
+        // Verification
+        verified: formData.verified,
+        
         updatedAt: new Date().toISOString(),
       };
 
@@ -478,15 +499,25 @@ const Restaurants = () => {
         toast.success('Restaurant updated successfully');
       } else {
         restaurantData.createdAt = new Date().toISOString();
-        await restaurantService.addRestaurant(restaurantData);
+        
+        // Try using restaurantService first, fallback to direct Firestore
+        try {
+          await restaurantService.addRestaurant(restaurantData);
+        } catch (serviceError) {
+          console.warn('Restaurant service failed, using direct Firestore:', serviceError);
+          // Fallback to direct Firestore
+          const docRef = await addDoc(collection(db, 'restaurants'), restaurantData);
+          console.log('Restaurant added with ID: ', docRef.id);
+        }
+        
         toast.success('Restaurant added successfully');
       }
 
       handleCloseDialog();
       fetchRestaurants();
     } catch (error) {
-      toast.error('Error saving restaurant');
-      console.error('Error:', error);
+      console.error('Error saving restaurant:', error);
+      toast.error(`Error saving restaurant: ${error.message}`);
     }
 
     setLoading(false);
@@ -501,19 +532,25 @@ const Restaurants = () => {
 
       // Upload new image if provided
       if (menuFormData.imageFile) {
-        const imageRef = ref(storage, `menuItems/${Date.now()}_${menuFormData.imageFile.name}`);
-        const snapshot = await uploadBytes(imageRef, menuFormData.imageFile);
-        imageURL = await getDownloadURL(snapshot.ref);
+        try {
+          const imageRef = ref(storage, `menuItems/${Date.now()}_${menuFormData.imageFile.name}`);
+          const snapshot = await uploadBytes(imageRef, menuFormData.imageFile);
+          imageURL = await getDownloadURL(snapshot.ref);
+          toast.success('Menu item image uploaded successfully');
+        } catch (uploadError) {
+          console.error('Menu image upload failed:', uploadError);
+          toast.warning('Menu image upload failed, saving without image');
+        }
       }
 
       const menuData = {
         name: menuFormData.name,
         category: menuFormData.category,
-        price: parseFloat(menuFormData.price),
+        price: parseFloat(menuFormData.price) || 0,
         description: menuFormData.description,
         available: menuFormData.available,
-        image: menuFormData.image, // Emoji/Unicode
-        imageUrl: imageURL, // Actual uploaded image URL
+        image: menuFormData.image,
+        imageUrl: imageURL,
         restaurantId: selectedRestaurant.id,
         updatedAt: new Date().toISOString(),
       };
@@ -530,8 +567,8 @@ const Restaurants = () => {
       handleCloseMenuDialog();
       fetchMenuItems(selectedRestaurant.id);
     } catch (error) {
-      toast.error('Error saving menu item');
-      console.error('Error:', error);
+      console.error('Error saving menu item:', error);
+      toast.error(`Error saving menu item: ${error.message}`);
     }
 
     setLoading(false);
@@ -634,25 +671,81 @@ const Restaurants = () => {
 
   const filteredEmojis = getFilteredEmojis();
 
+  // Enhanced restaurant columns with more info
   const restaurantColumns = [
     { 
       field: 'logo', 
       headerName: 'Logo', 
       width: 80,
       renderCell: (params) => (
-        params.value ? (
-          <Avatar src={params.value} sx={{ width: 40, height: 40 }} />
-        ) : (
-          <Avatar sx={{ width: 40, height: 40 }}>
-            <RestaurantIcon />
-          </Avatar>
-        )
+        <Badge
+          color={params.row.featured ? "secondary" : "default"}
+          badgeContent={params.row.featured ? "★" : ""}
+        >
+          {params.value ? (
+            <Avatar src={params.value} sx={{ width: 40, height: 40 }} />
+          ) : (
+            <Avatar sx={{ width: 40, height: 40 }}>
+              <RestaurantIcon />
+            </Avatar>
+          )}
+        </Badge>
       ),
     },
     { field: 'name', headerName: 'Name', width: 200 },
-    { field: 'ownerEmail', headerName: 'Owner Email', width: 200 },
-    { field: 'contact', headerName: 'Contact', width: 150 },
-    { field: 'address', headerName: 'Address', width: 250, flex: 1 },
+    { 
+      field: 'cuisine', 
+      headerName: 'Cuisine', 
+      width: 150,
+      renderCell: (params) => (
+        <Chip label={params.value} size="small" variant="outlined" />
+      ),
+    },
+    { 
+      field: 'rating', 
+      headerName: 'Rating', 
+      width: 120,
+      renderCell: (params) => (
+        <Box display="flex" alignItems="center">
+          <StarIcon sx={{ color: '#ffb400', fontSize: 18, mr: 0.5 }} />
+          <Typography variant="body2">
+            {params.value} ({params.row.totalRatings || 0})
+          </Typography>
+        </Box>
+      ),
+    },
+    { 
+      field: 'currentlyAcceptingOrders', 
+      headerName: 'Accepting Orders', 
+      width: 140,
+      renderCell: (params) => (
+        <Chip 
+          label={params.value ? 'Yes' : 'No'}
+          color={params.value ? 'success' : 'error'}
+          size="small"
+        />
+      ),
+    },
+    {
+      field: 'deliveryAvailable',
+      headerName: 'Delivery',
+      width: 100,
+      renderCell: (params) => (
+        <Tooltip title={params.value ? 'Delivery Available' : 'Delivery Not Available'}>
+          {params.value ? <DeliveryIcon color="success" /> : <DeliveryIcon color="disabled" />}
+        </Tooltip>
+      ),
+    },
+    {
+      field: 'takeawayAvailable',
+      headerName: 'Takeaway',
+      width: 100,
+      renderCell: (params) => (
+        <Tooltip title={params.value ? 'Takeaway Available' : 'Takeaway Not Available'}>
+          {params.value ? <TakeoutIcon color="success" /> : <TakeoutIcon color="disabled" />}
+        </Tooltip>
+      ),
+    },
     {
       field: 'isActive',
       headerName: 'Status',
@@ -1035,9 +1128,14 @@ const Restaurants = () => {
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4">
-          Restaurants Management
-        </Typography>
+        <Box>
+          <Typography variant="h4">
+            Restaurants Management
+          </Typography>
+          <Typography variant="body2" color="textSecondary">
+            Manage restaurants, menus, and delivery settings
+          </Typography>
+        </Box>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
@@ -1061,206 +1159,541 @@ const Restaurants = () => {
         </CardContent>
       </Card>
 
-      {/* Restaurant Dialog */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
+      {/* Enhanced Restaurant Dialog */}
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="lg" fullWidth>
         <DialogTitle>
-          {editingRestaurant ? 'Edit Restaurant' : 'Add New Restaurant'}
+          <Box display="flex" alignItems="center" justifyContent="space-between">
+            <Typography variant="h5">
+              {editingRestaurant ? 'Edit Restaurant' : 'Add New Restaurant'}
+            </Typography>
+            <Box>
+              <Chip 
+                label={formData.verified ? "Verified" : "Unverified"} 
+                color={formData.verified ? "success" : "default"}
+                size="small"
+              />
+              <Chip 
+                label={formData.featured ? "Featured" : "Regular"} 
+                color={formData.featured ? "secondary" : "default"}
+                size="small"
+                sx={{ ml: 1 }}
+              />
+            </Box>
+          </Box>
         </DialogTitle>
+        
+        <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
+          <Tab label="Basic Info" />
+          <Tab label="Contact & Location" />
+          <Tab label="Business Hours" />
+          <Tab label="Services & Delivery" />
+          <Tab label="Financial" />
+        </Tabs>
+
         <form onSubmit={handleSubmit}>
-          <DialogContent>
-            <Grid container spacing={2}>
-              <Grid item xs={12} display="flex" justifyContent="center" mb={2}>
-                {formData.logoPreview ? (
-                  <Avatar 
-                    src={formData.logoPreview} 
-                    sx={{ width: 100, height: 100 }} 
+          <DialogContent sx={{ maxHeight: '60vh', overflow: 'auto' }}>
+            {activeTab === 0 && (
+              <Grid container spacing={3}>
+                <Grid item xs={12} display="flex" justifyContent="center" mb={2}>
+                  <Box position="relative">
+                    <Avatar 
+                      src={formData.logoPreview} 
+                      sx={{ width: 120, height: 120 }}
+                      variant="rounded"
+                    >
+                      <RestaurantIcon fontSize="large" />
+                    </Avatar>
+                    <IconButton 
+                      sx={{ 
+                        position: 'absolute', 
+                        bottom: -8, 
+                        right: -8,
+                        backgroundColor: 'white',
+                        boxShadow: 2
+                      }}
+                      component="label"
+                    >
+                      <UploadIcon />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        onChange={(e) => handleFileChange('logo', e.target.files[0])}
+                      />
+                    </IconButton>
+                  </Box>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Restaurant Name *"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    required
                   />
-                ) : (
-                  <Avatar sx={{ width: 100, height: 100 }}>
-                    <RestaurantIcon fontSize="large" />
-                  </Avatar>
-                )}
-              </Grid>
-              
-              <Grid item xs={12}>
-                <input
-                  accept="image/*"
-                  type="file"
-                  onChange={handleFileChange}
-                  style={{ display: 'none' }}
-                  id="logo-upload"
-                />
-                <label htmlFor="logo-upload">
-                  <Button variant="outlined" component="span" fullWidth>
-                    Upload Logo (Optional)
-                  </Button>
-                </label>
-              </Grid>
+                </Grid>
 
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Restaurant Name"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  required
-                  margin="normal"
-                />
-              </Grid>
-              
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth margin="normal">
-                  <InputLabel>Restaurant Icon</InputLabel>
-                  <Select
-                    name="image"
-                    value={formData.image}
-                    onChange={handleInputChange}
-                    label="Restaurant Icon"
-                  >
-                    <MenuItem value="🍽️">🍽️ General</MenuItem>
-                    <MenuItem value="🍛">🍛 Curry</MenuItem>
-                    <MenuItem value="🍕">🍕 Pizza</MenuItem>
-                    <MenuItem value="🍔">🍔 Burger</MenuItem>
-                    <MenuItem value="🍜">🍜 Noodles</MenuItem>
-                    <MenuItem value="🍱">🍱 Biryani</MenuItem>
-                    <MenuItem value="🫓">🫓 South Indian</MenuItem>
-                    <MenuItem value="🌮">🌮 Mexican</MenuItem>
-                    <MenuItem value="🍣">🍣 Japanese</MenuItem>
-                    <MenuItem value="🥘">🥘 Multi Cuisine</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Owner Email"
-                  name="ownerEmail"
-                  type="email"
-                  value={formData.ownerEmail}
-                  onChange={handleInputChange}
-                  required
-                  margin="normal"
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Contact Number"
-                  name="contact"
-                  value={formData.contact}
-                  onChange={handleInputChange}
-                  required
-                  margin="normal"
-                  placeholder="Restaurant Contact"
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Owner Phone"
-                  name="ownerPhone"
-                  value={formData.ownerPhone}
-                  onChange={handleInputChange}
-                  required
-                  margin="normal"
-                  placeholder="Owner's Personal Phone"
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Cuisine Type"
-                  name="cuisine"
-                  value={formData.cuisine}
-                  onChange={handleInputChange}
-                  required
-                  margin="normal"
-                  placeholder="e.g., Indian, Chinese, Italian"
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Delivery Time"
-                  name="deliveryTime"
-                  value={formData.deliveryTime}
-                  onChange={handleInputChange}
-                  required
-                  margin="normal"
-                  placeholder="e.g., 25-30 min"
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Rating"
-                  name="rating"
-                  type="number"
-                  value={formData.rating}
-                  onChange={handleInputChange}
-                  margin="normal"
-                  inputProps={{ step: '0.1', min: '0', max: '5' }}
-                  placeholder="4.5"
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Address"
-                  name="address"
-                  multiline
-                  rows={2}
-                  value={formData.address}
-                  onChange={handleInputChange}
-                  required
-                  margin="normal"
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth margin="normal">
-                  <InputLabel>Status</InputLabel>
-                  <Select
-                    name="status"
-                    value={formData.status}
-                    onChange={handleInputChange}
-                    label="Status"
-                  >
-                    <MenuItem value="active">Active</MenuItem>
-                    <MenuItem value="inactive">Inactive</MenuItem>
-                    <MenuItem value="pending">Pending</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      name="isActive"
-                      checked={formData.isActive}
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth required>
+                    <InputLabel>Cuisine Type *</InputLabel>
+                    <Select
+                      name="cuisine"
+                      value={formData.cuisine}
                       onChange={handleInputChange}
-                    />
-                  }
-                  label="Active Restaurant"
-                  sx={{ mt: 2 }}
-                />
+                      label="Cuisine Type *"
+                    >
+                      {cuisineTypes.map((cuisine) => (
+                        <MenuItem key={cuisine} value={cuisine}>{cuisine}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Description"
+                    name="description"
+                    multiline
+                    rows={3}
+                    value={formData.description}
+                    onChange={handleInputChange}
+                    placeholder="Describe your restaurant, specialties, etc."
+                  />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <FormControl fullWidth>
+                    <InputLabel>Restaurant Tags</InputLabel>
+                    <Select
+                      multiple
+                      name="tags"
+                      value={formData.tags}
+                      onChange={(e) => handleArrayInputChange('tags', e.target.value)}
+                      onClose={(e) => e.stopPropagation()}
+                      label="Restaurant Tags"
+                      renderValue={(selected) => (
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          {selected.map((value) => (
+                            <Chip key={value} label={value} size="small" />
+                          ))}
+                        </Box>
+                      )}
+                      MenuProps={{
+                        PaperProps: {
+                          style: {
+                            maxHeight: 300,
+                          },
+                        },
+                      }}
+                    >
+                      {restaurantTags.map((tag) => (
+                        <MenuItem key={tag} value={tag}>
+                          {tag}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Preparation Time *"
+                    name="preparationTime"
+                    value={formData.preparationTime}
+                    onChange={handleInputChange}
+                    required
+                    placeholder="e.g., 25-30 min"
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Rating"
+                    name="rating"
+                    type="number"
+                    value={formData.rating}
+                    onChange={handleInputChange}
+                    inputProps={{ step: '0.1', min: '0', max: '5' }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <StarIcon sx={{ color: '#ffb400' }} />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        name="featured"
+                        checked={formData.featured}
+                        onChange={handleInputChange}
+                      />
+                    }
+                    label="Featured Restaurant"
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        name="verified"
+                        checked={formData.verified}
+                        onChange={handleInputChange}
+                      />
+                    }
+                    label="Verified Restaurant"
+                  />
+                </Grid>
               </Grid>
-            </Grid>
+            )}
+
+            {activeTab === 1 && (
+              <Grid container spacing={3}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Owner Email *"
+                    name="ownerEmail"
+                    type="email"
+                    value={formData.ownerEmail}
+                    onChange={handleInputChange}
+                    required
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <EmailIcon color="action" />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Restaurant Contact *"
+                    name="contact"
+                    value={formData.contact}
+                    onChange={handleInputChange}
+                    required
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <PhoneIcon color="action" />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Owner Phone *"
+                    name="ownerPhone"
+                    value={formData.ownerPhone}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="City *"
+                    name="city"
+                    value={formData.city}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="State *"
+                    name="state"
+                    value={formData.state}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Pincode *"
+                    name="pincode"
+                    value={formData.pincode}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Full Address *"
+                    name="address"
+                    multiline
+                    rows={3}
+                    value={formData.address}
+                    onChange={handleInputChange}
+                    required
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <LocationIcon color="action" />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
+              </Grid>
+            )}
+
+            {activeTab === 2 && (
+              <Grid container spacing={3}>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth required>
+                    <InputLabel>Opening Time *</InputLabel>
+                    <Select
+                      name="openingTime"
+                      value={formData.openingTime}
+                      onChange={handleInputChange}
+                      label="Opening Time *"
+                      startAdornment={
+                        <InputAdornment position="start">
+                          <ScheduleIcon color="action" />
+                        </InputAdornment>
+                      }
+                    >
+                      {timeSlots.map((time) => (
+                        <MenuItem key={time} value={time}>{time}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth required>
+                    <InputLabel>Closing Time *</InputLabel>
+                    <Select
+                      name="closingTime"
+                      value={formData.closingTime}
+                      onChange={handleInputChange}
+                      label="Closing Time *"
+                      startAdornment={
+                        <InputAdornment position="start">
+                          <ScheduleIcon color="action" />
+                        </InputAdornment>
+                      }
+                    >
+                      {timeSlots.map((time) => (
+                        <MenuItem key={time} value={time}>{time}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Typography variant="h6" gutterBottom>
+                    Working Days
+                  </Typography>
+                  <FormGroup row>
+                    {daysOfWeek.map((day) => (
+                      <FormControlLabel
+                        key={day.id}
+                        control={
+                          <Switch
+                            checked={formData.workingDays.includes(day.id)}
+                            onChange={(e) => {
+                              const newWorkingDays = e.target.checked
+                                ? [...formData.workingDays, day.id]
+                                : formData.workingDays.filter(d => d !== day.id);
+                              handleArrayInputChange('workingDays', newWorkingDays);
+                            }}
+                            size="small"
+                          />
+                        }
+                        label={day.name}
+                      />
+                    ))}
+                  </FormGroup>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Alert severity="info">
+                    Make sure to set proper working hours and days. Orders won't be accepted outside these hours.
+                  </Alert>
+                </Grid>
+              </Grid>
+            )}
+
+            {activeTab === 3 && (
+              <Grid container spacing={3}>
+                <Grid item xs={12}>
+                  <Typography variant="h6" gutterBottom>
+                    Service Availability
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={4}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            name="deliveryAvailable"
+                            checked={formData.deliveryAvailable}
+                            onChange={handleInputChange}
+                          />
+                        }
+                        label="Delivery"
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            name="takeawayAvailable"
+                            checked={formData.takeawayAvailable}
+                            onChange={handleInputChange}
+                          />
+                        }
+                        label="Takeaway"
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            name="dineInAvailable"
+                            checked={formData.dineInAvailable}
+                            onChange={handleInputChange}
+                          />
+                        }
+                        label="Dine-in"
+                      />
+                    </Grid>
+                  </Grid>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        name="currentlyAcceptingOrders"
+                        checked={formData.currentlyAcceptingOrders}
+                        onChange={handleInputChange}
+                      />
+                    }
+                    label="Currently Accepting Orders"
+                  />
+                  {!formData.currentlyAcceptingOrders && (
+                    <Alert severity="warning" sx={{ mt: 1 }}>
+                      Restaurant is not accepting orders currently
+                    </Alert>
+                  )}
+                </Grid>
+{/* 
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Delivery Radius (km) *"
+                    name="deliveryRadius"
+                    type="number"
+                    value={formData.deliveryRadius}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </Grid> */}
+
+                {/* <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Delivery Fee (₹)"
+                    name="deliveryFee"
+                    type="number"
+                    value={formData.deliveryFee}
+                    onChange={handleInputChange}
+                    inputProps={{ step: '0.01', min: '0' }}
+                  />
+                </Grid> */}
+
+                {/* <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Packaging Fee (₹)"
+                    name="packagingFee"
+                    type="number"
+                    value={formData.packagingFee}
+                    onChange={handleInputChange}
+                    inputProps={{ step: '0.01', min: '0' }}
+                  />
+                </Grid> */}
+              </Grid>
+            )}
+
+            {activeTab === 4 && (
+              <Grid container spacing={3}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Commission Rate (%)"
+                    name="commissionRate"
+                    type="number"
+                    value={formData.commissionRate}
+                    onChange={handleInputChange}
+                    inputProps={{ step: '0.1', min: '0', max: '50' }}
+                    helperText="Platform commission percentage"
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Tax Rate (%)"
+                    name="taxRate"
+                    type="number"
+                    value={formData.taxRate}
+                    onChange={handleInputChange}
+                    inputProps={{ step: '0.1', min: '0', max: '30' }}
+                    helperText="GST/tax percentage"
+                  />
+                </Grid>
+              </Grid>
+            )}
           </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseDialog}>Cancel</Button>
-            <Button type="submit" variant="contained" disabled={loading}>
-              {loading ? 'Saving...' : editingRestaurant ? 'Update' : 'Add'}
-            </Button>
+
+          <DialogActions sx={{ p: 3, borderTop: 1, borderColor: 'divider' }}>
+            <Box display="flex" justifyContent="space-between" width="100%">
+              <Box>
+                {activeTab > 0 && (
+                  <Button onClick={() => setActiveTab(activeTab - 1)}>
+                    Previous
+                  </Button>
+                )}
+              </Box>
+              <Box>
+                {activeTab < 4 && (
+                  <Button onClick={() => setActiveTab(activeTab + 1)} variant="outlined" sx={{ mr: 1 }}>
+                    Next
+                  </Button>
+                )}
+                <Button onClick={handleCloseDialog}>Cancel</Button>
+                <Button type="submit" variant="contained" disabled={loading} sx={{ ml: 1 }}>
+                  {loading ? 'Saving...' : editingRestaurant ? 'Update' : 'Add'} Restaurant
+                </Button>
+              </Box>
+            </Box>
           </DialogActions>
         </form>
       </Dialog>
