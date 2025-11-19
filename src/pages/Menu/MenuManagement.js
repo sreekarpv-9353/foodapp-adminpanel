@@ -16,11 +16,17 @@ import {
   Typography,
   IconButton,
   Chip,
+  Rating,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  Star as StarIcon,
 } from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
 import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore';
@@ -43,6 +49,8 @@ const MenuManagement = () => {
     description: '',
     isAvailable: true,
     image: null,
+    rating: 0,
+    ratingCount: 0,
   });
 
   useEffect(() => {
@@ -90,6 +98,8 @@ const MenuManagement = () => {
         description: item.description || '',
         isAvailable: item.isAvailable !== undefined ? item.isAvailable : true,
         image: null,
+        rating: item.rating || 0,
+        ratingCount: item.ratingCount || 0,
       });
     } else {
       setEditingItem(null);
@@ -100,6 +110,8 @@ const MenuManagement = () => {
         description: '',
         isAvailable: true,
         image: null,
+        rating: 0,
+        ratingCount: 0,
       });
     }
     setOpenDialog(true);
@@ -125,6 +137,13 @@ const MenuManagement = () => {
     }));
   };
 
+  const handleRatingChange = (event, newValue) => {
+    setFormData(prev => ({
+      ...prev,
+      rating: newValue,
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -146,6 +165,8 @@ const MenuManagement = () => {
         description: formData.description,
         isAvailable: formData.isAvailable,
         image: imageURL,
+        rating: parseFloat(formData.rating),
+        ratingCount: parseInt(formData.ratingCount),
         updatedAt: new Date(),
       };
 
@@ -200,6 +221,21 @@ const MenuManagement = () => {
     }
   };
 
+  const updateRating = async (itemId, newRating, newRatingCount) => {
+    try {
+      await updateDoc(doc(db, 'restaurants', restaurantId, 'menu', itemId), {
+        rating: parseFloat(newRating),
+        ratingCount: parseInt(newRatingCount),
+        updatedAt: new Date(),
+      });
+      toast.success('Rating updated successfully');
+      fetchMenuItems();
+    } catch (error) {
+      toast.error('Error updating rating');
+      console.error('Error:', error);
+    }
+  };
+
   const columns = [
     { 
       field: 'image', 
@@ -226,6 +262,24 @@ const MenuManagement = () => {
       renderCell: (params) => `$${params.value}`,
     },
     { 
+      field: 'rating', 
+      headerName: 'Rating', 
+      width: 150,
+      renderCell: (params) => (
+        <Box display="flex" alignItems="center">
+          <Rating
+            value={params.value || 0}
+            precision={0.1}
+            readOnly
+            size="small"
+          />
+          <Typography variant="body2" sx={{ ml: 1 }}>
+            ({params.row.ratingCount || 0})
+          </Typography>
+        </Box>
+      ),
+    },
+    { 
       field: 'isAvailable', 
       headerName: 'Available', 
       width: 120,
@@ -240,25 +294,35 @@ const MenuManagement = () => {
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 200,
+      width: 250,
       sortable: false,
       renderCell: (params) => (
         <Box>
           <IconButton
             onClick={() => toggleAvailability(params.row)}
             color={params.row.isAvailable ? 'secondary' : 'primary'}
+            title={params.row.isAvailable ? 'Disable' : 'Enable'}
           >
             {params.row.isAvailable ? 'Disable' : 'Enable'}
           </IconButton>
           <IconButton
             onClick={() => handleOpenDialog(params.row)}
             color="primary"
+            title="Edit"
           >
             <EditIcon />
           </IconButton>
           <IconButton
+            onClick={() => handleRatingQuickUpdate(params.row)}
+            color="info"
+            title="Update Rating"
+          >
+            <StarIcon />
+          </IconButton>
+          <IconButton
             onClick={() => handleDelete(params.row.id)}
             color="error"
+            title="Delete"
           >
             <DeleteIcon />
           </IconButton>
@@ -266,6 +330,27 @@ const MenuManagement = () => {
       ),
     },
   ];
+
+  // Quick rating update dialog
+  const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [quickRating, setQuickRating] = useState(0);
+  const [quickRatingCount, setQuickRatingCount] = useState(0);
+
+  const handleRatingQuickUpdate = (item) => {
+    setSelectedItem(item);
+    setQuickRating(item.rating || 0);
+    setQuickRatingCount(item.ratingCount || 0);
+    setRatingDialogOpen(true);
+  };
+
+  const handleQuickRatingSubmit = async () => {
+    if (selectedItem) {
+      await updateRating(selectedItem.id, quickRating, quickRatingCount);
+      setRatingDialogOpen(false);
+      setSelectedItem(null);
+    }
+  };
 
   if (!restaurantId) {
     return <Typography>No restaurant selected</Typography>;
@@ -342,6 +427,40 @@ const MenuManagement = () => {
                   inputProps={{ step: '0.01', min: '0' }}
                 />
               </Grid>
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ mt: 2 }}>
+                  <Typography component="legend">Rating</Typography>
+                  <Rating
+                    name="rating"
+                    value={formData.rating}
+                    onChange={handleRatingChange}
+                    precision={0.5}
+                    size="large"
+                  />
+                  <TextField
+                    fullWidth
+                    label="Rating Value"
+                    name="rating"
+                    type="number"
+                    value={formData.rating}
+                    onChange={handleInputChange}
+                    margin="normal"
+                    inputProps={{ step: '0.1', min: '0', max: '5' }}
+                  />
+                </Box>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Rating Count"
+                  name="ratingCount"
+                  type="number"
+                  value={formData.ratingCount}
+                  onChange={handleInputChange}
+                  margin="normal"
+                  inputProps={{ min: '0' }}
+                />
+              </Grid>
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -394,6 +513,49 @@ const MenuManagement = () => {
             </Button>
           </DialogActions>
         </form>
+      </Dialog>
+
+      {/* Quick Rating Update Dialog */}
+      <Dialog open={ratingDialogOpen} onClose={() => setRatingDialogOpen(false)}>
+        <DialogTitle>Update Rating</DialogTitle>
+        <DialogContent>
+          <Typography variant="h6" gutterBottom>
+            {selectedItem?.name}
+          </Typography>
+          <Box sx={{ mt: 2 }}>
+            <Typography component="legend">Rating</Typography>
+            <Rating
+              value={quickRating}
+              onChange={(event, newValue) => setQuickRating(newValue)}
+              precision={0.5}
+              size="large"
+            />
+          </Box>
+          <TextField
+            fullWidth
+            label="Rating Value"
+            type="number"
+            value={quickRating}
+            onChange={(e) => setQuickRating(parseFloat(e.target.value))}
+            margin="normal"
+            inputProps={{ step: '0.1', min: '0', max: '5' }}
+          />
+          <TextField
+            fullWidth
+            label="Rating Count"
+            type="number"
+            value={quickRatingCount}
+            onChange={(e) => setQuickRatingCount(parseInt(e.target.value))}
+            margin="normal"
+            inputProps={{ min: '0' }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRatingDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleQuickRatingSubmit} variant="contained">
+            Update Rating
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );

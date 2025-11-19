@@ -28,6 +28,7 @@ import {
   Tooltip,
   Alert,
   FormGroup,
+  Rating,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -45,6 +46,7 @@ import {
   Phone as PhoneIcon,
   LocationOn as LocationIcon,
   Schedule as ScheduleIcon,
+  StarBorder as StarBorderIcon,
 } from '@mui/icons-material';
 import { DataGrid } from '@mui/x-data-grid';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -58,6 +60,7 @@ const Restaurants = () => {
   const [menuItems, setMenuItems] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [openMenuDialog, setOpenMenuDialog] = useState(false);
+  const [openRatingDialog, setOpenRatingDialog] = useState(false);
   const [editingRestaurant, setEditingRestaurant] = useState(null);
   const [editingMenuItem, setEditingMenuItem] = useState(null);
   const [selectedRestaurant, setSelectedRestaurant] = useState(null);
@@ -128,6 +131,13 @@ const Restaurants = () => {
     image: '🍛',
     imageFile: null,
     imagePreview: '',
+    rating: 4.0, // Default rating
+    ratingCount: 0,
+  });
+
+  const [ratingFormData, setRatingFormData] = useState({
+    rating: 4.0,
+    ratingCount: 0,
   });
 
   // Days of week
@@ -225,6 +235,9 @@ const Restaurants = () => {
       const items = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
+        // Ensure rating and ratingCount have default values
+        rating: doc.data().rating || 4.0,
+        ratingCount: doc.data().ratingCount || 0,
       }));
       setMenuItems(items);
     } catch (error) {
@@ -343,6 +356,8 @@ const Restaurants = () => {
         image: menuItem.image || '🍛',
         imageFile: null,
         imagePreview: menuItem.imageUrl || '',
+        rating: menuItem.rating || 4.0,
+        ratingCount: menuItem.ratingCount || 0,
       });
     } else {
       setEditingMenuItem(null);
@@ -355,6 +370,8 @@ const Restaurants = () => {
         image: '🍛',
         imageFile: null,
         imagePreview: '',
+        rating: 4.0,
+        ratingCount: 0,
       });
     }
     setUnicodeSearch('');
@@ -365,6 +382,22 @@ const Restaurants = () => {
     setOpenMenuDialog(false);
     setEditingMenuItem(null);
     setUnicodeSearch('');
+  };
+
+  const handleOpenRatingDialog = (menuItem = null) => {
+    if (menuItem) {
+      setEditingMenuItem(menuItem);
+      setRatingFormData({
+        rating: menuItem.rating || 4.0,
+        ratingCount: menuItem.ratingCount || 0,
+      });
+    }
+    setOpenRatingDialog(true);
+  };
+
+  const handleCloseRatingDialog = () => {
+    setOpenRatingDialog(false);
+    setEditingMenuItem(null);
   };
 
   const handleInputChange = (e) => {
@@ -380,6 +413,28 @@ const Restaurants = () => {
     setMenuFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
+    }));
+  };
+
+  const handleRatingInputChange = (e) => {
+    const { name, value } = e.target;
+    setRatingFormData(prev => ({
+      ...prev,
+      [name]: parseFloat(value) || 0,
+    }));
+  };
+
+  const handleRatingChange = (event, newValue) => {
+    setRatingFormData(prev => ({
+      ...prev,
+      rating: newValue,
+    }));
+  };
+
+  const handleMenuRatingChange = (event, newValue) => {
+    setMenuFormData(prev => ({
+      ...prev,
+      rating: newValue,
     }));
   };
 
@@ -552,6 +607,8 @@ const Restaurants = () => {
         image: menuFormData.image,
         imageUrl: imageURL,
         restaurantId: selectedRestaurant.id,
+        rating: parseFloat(menuFormData.rating) || 4.0,
+        ratingCount: parseInt(menuFormData.ratingCount) || 0,
         updatedAt: new Date().toISOString(),
       };
 
@@ -569,6 +626,28 @@ const Restaurants = () => {
     } catch (error) {
       console.error('Error saving menu item:', error);
       toast.error(`Error saving menu item: ${error.message}`);
+    }
+
+    setLoading(false);
+  };
+
+  const handleRatingSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      await updateDoc(doc(db, 'menuItems', editingMenuItem.id), {
+        rating: parseFloat(ratingFormData.rating) || 4.0,
+        ratingCount: parseInt(ratingFormData.ratingCount) || 0,
+        updatedAt: new Date().toISOString(),
+      });
+
+      toast.success('Rating updated successfully');
+      handleCloseRatingDialog();
+      fetchMenuItems(selectedRestaurant.id);
+    } catch (error) {
+      console.error('Error updating rating:', error);
+      toast.error(`Error updating rating: ${error.message}`);
     }
 
     setLoading(false);
@@ -671,6 +750,95 @@ const Restaurants = () => {
 
   const filteredEmojis = getFilteredEmojis();
 
+  // Enhanced menu item columns with rating
+  const menuItemColumns = [
+    { 
+      field: 'imageUrl', 
+      headerName: 'Image', 
+      width: 80,
+      renderCell: (params) => (
+        params.value ? (
+          <img 
+            src={params.value} 
+            alt="" 
+            style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 4 }}
+          />
+        ) : (
+          <Typography variant="h4">{params.row.image || '🍽️'}</Typography>
+        )
+      ),
+    },
+    { field: 'name', headerName: 'Item Name', width: 200 },
+    { field: 'category', headerName: 'Category', width: 150 },
+    { 
+      field: 'price', 
+      headerName: 'Price', 
+      width: 120,
+      renderCell: (params) => `₹${params.value?.toFixed(2)}`,
+    },
+    { 
+      field: 'rating', 
+      headerName: 'Rating', 
+      width: 180,
+      renderCell: (params) => {
+        const rating = params.value || 4.0;
+        const ratingCount = params.row.ratingCount || 0;
+        
+        return (
+          <Box display="flex" alignItems="center" gap={1}>
+            <Rating
+              value={rating}
+              precision={0.1}
+              readOnly
+              size="small"
+              emptyIcon={<StarBorderIcon fontSize="inherit" />}
+            />
+            <Typography variant="body2" color="textSecondary">
+              ({rating.toFixed(1)})
+            </Typography>
+            {ratingCount > 0 && (
+              <Typography variant="caption" color="textSecondary">
+                ({ratingCount})
+              </Typography>
+            )}
+          </Box>
+        );
+      },
+    },
+    { 
+      field: 'description', 
+      headerName: 'Description', 
+      width: 200,
+      flex: 1 
+    },
+    {
+      field: 'available',
+      headerName: 'Available',
+      width: 120,
+      renderCell: (params) => (
+        <Chip 
+          label={params.value ? 'Yes' : 'No'}
+          color={params.value ? 'success' : 'error'}
+          size="small"
+        />
+      ),
+    },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      width: 120,
+      sortable: false,
+      renderCell: (params) => (
+        <IconButton
+          onClick={(e) => handleMenuItemMenuOpen(e, params.row)}
+          size="small"
+        >
+          <MoreIcon />
+        </IconButton>
+      ),
+    },
+  ];
+
   // Enhanced restaurant columns with more info
   const restaurantColumns = [
     { 
@@ -766,65 +934,6 @@ const Restaurants = () => {
       renderCell: (params) => (
         <IconButton
           onClick={(e) => handleMenuOpen(e, params.row)}
-          size="small"
-        >
-          <MoreIcon />
-        </IconButton>
-      ),
-    },
-  ];
-
-  const menuItemColumns = [
-    { 
-      field: 'imageUrl', 
-      headerName: 'Image', 
-      width: 80,
-      renderCell: (params) => (
-        params.value ? (
-          <img 
-            src={params.value} 
-            alt="" 
-            style={{ width: 50, height: 50, objectFit: 'cover', borderRadius: 4 }}
-          />
-        ) : (
-          <Typography variant="h4">{params.row.image || '🍽️'}</Typography>
-        )
-      ),
-    },
-    { field: 'name', headerName: 'Item Name', width: 200 },
-    { field: 'category', headerName: 'Category', width: 150 },
-    { 
-      field: 'price', 
-      headerName: 'Price', 
-      width: 120,
-      renderCell: (params) => `₹${params.value?.toFixed(2)}`,
-    },
-    { 
-      field: 'description', 
-      headerName: 'Description', 
-      width: 250,
-      flex: 1 
-    },
-    {
-      field: 'available',
-      headerName: 'Available',
-      width: 120,
-      renderCell: (params) => (
-        <Chip 
-          label={params.value ? 'Yes' : 'No'}
-          color={params.value ? 'success' : 'error'}
-          size="small"
-        />
-      ),
-    },
-    {
-      field: 'actions',
-      headerName: 'Actions',
-      width: 100,
-      sortable: false,
-      renderCell: (params) => (
-        <IconButton
-          onClick={(e) => handleMenuItemMenuOpen(e, params.row)}
           size="small"
         >
           <MoreIcon />
@@ -1049,6 +1158,40 @@ const Restaurants = () => {
                   />
                 </Grid>
 
+                <Grid item xs={12} sm={6}>
+                  <Box sx={{ mt: 2 }}>
+                    <Typography component="legend" gutterBottom>
+                      Rating
+                    </Typography>
+                    <Box display="flex" alignItems="center" gap={2}>
+                      <Rating
+                        name="rating"
+                        value={menuFormData.rating}
+                        onChange={handleMenuRatingChange}
+                        precision={0.5}
+                        size="large"
+                      />
+                      <Typography variant="body1">
+                        {menuFormData.rating.toFixed(1)}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Rating Count"
+                    name="ratingCount"
+                    type="number"
+                    value={menuFormData.ratingCount}
+                    onChange={handleMenuInputChange}
+                    margin="normal"
+                    inputProps={{ min: '0' }}
+                    helperText="Number of ratings received"
+                  />
+                </Grid>
+
                 <Grid item xs={12}>
                   <TextField
                     fullWidth
@@ -1085,6 +1228,77 @@ const Restaurants = () => {
           </form>
         </Dialog>
 
+        {/* Rating Update Dialog */}
+        <Dialog open={openRatingDialog} onClose={handleCloseRatingDialog} maxWidth="sm" fullWidth>
+          <DialogTitle>
+            Update Rating - {editingMenuItem?.name}
+          </DialogTitle>
+          <form onSubmit={handleRatingSubmit}>
+            <DialogContent>
+              <Grid container spacing={3}>
+                <Grid item xs={12}>
+                  <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
+                    <Typography component="legend" variant="h6">
+                      Current Rating
+                    </Typography>
+                    <Rating
+                      name="rating"
+                      value={ratingFormData.rating}
+                      onChange={handleRatingChange}
+                      precision={0.5}
+                      size="large"
+                      sx={{ fontSize: '3rem' }}
+                    />
+                    <Typography variant="h4" color="primary">
+                      {ratingFormData.rating.toFixed(1)}
+                    </Typography>
+                  </Box>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Rating Value"
+                    name="rating"
+                    type="number"
+                    value={ratingFormData.rating}
+                    onChange={handleRatingInputChange}
+                    required
+                    inputProps={{ step: '0.1', min: '0', max: '5' }}
+                    helperText="0.0 to 5.0"
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Rating Count"
+                    name="ratingCount"
+                    type="number"
+                    value={ratingFormData.ratingCount}
+                    onChange={handleRatingInputChange}
+                    required
+                    inputProps={{ min: '0' }}
+                    helperText="Number of ratings"
+                  />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Alert severity="info">
+                    Set rating to 4.0 and count to 0 if no ratings are available yet.
+                  </Alert>
+                </Grid>
+              </Grid>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={handleCloseRatingDialog}>Cancel</Button>
+              <Button type="submit" variant="contained" disabled={loading}>
+                {loading ? 'Updating...' : 'Update Rating'}
+              </Button>
+            </DialogActions>
+          </form>
+        </Dialog>
+
         {/* Menu Item Action Menu */}
         <Menu
           anchorEl={menuAnchorEl}
@@ -1098,7 +1312,16 @@ const Restaurants = () => {
             }}
           >
             <EditIcon sx={{ mr: 1 }} />
-            Edit
+            Edit Item
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              handleOpenRatingDialog(editingMenuItem);
+              handleMenuItemMenuClose();
+            }}
+          >
+            <StarIcon sx={{ mr: 1 }} />
+            Update Rating
           </MenuItem>
           <MenuItem
             onClick={() => {
@@ -1124,6 +1347,10 @@ const Restaurants = () => {
       </Box>
     );
   }
+
+  // ... (rest of the code remains the same for restaurant management)
+  // The restaurant management part of your code remains unchanged
+  // Only the menu items section has been enhanced with rating functionality
 
   return (
     <Box>
@@ -1603,42 +1830,6 @@ const Restaurants = () => {
                     </Alert>
                   )}
                 </Grid>
-{/* 
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Delivery Radius (km) *"
-                    name="deliveryRadius"
-                    type="number"
-                    value={formData.deliveryRadius}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </Grid> */}
-
-                {/* <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Delivery Fee (₹)"
-                    name="deliveryFee"
-                    type="number"
-                    value={formData.deliveryFee}
-                    onChange={handleInputChange}
-                    inputProps={{ step: '0.01', min: '0' }}
-                  />
-                </Grid> */}
-
-                {/* <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Packaging Fee (₹)"
-                    name="packagingFee"
-                    type="number"
-                    value={formData.packagingFee}
-                    onChange={handleInputChange}
-                    inputProps={{ step: '0.01', min: '0' }}
-                  />
-                </Grid> */}
               </Grid>
             )}
 
