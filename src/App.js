@@ -5,6 +5,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import DriverOrdersManagement from '../src/pages/Drivers/DriverOrdersManagement';
 
 import { store } from './store';
 import Layout from './components/Layout/Layout';
@@ -91,6 +92,17 @@ function App() {
                   </Layout>
                 </PrivateRoute>
               } />
+              <Route
+                path="/driver-orders"
+                element={
+                  <PrivateRoute>
+                    <Layout>
+                      <DriverOrdersManagement />
+                    </Layout>
+                  </PrivateRoute>
+                }
+              />
+
               {/* Add Settings Route */}
               <Route path="/settings" element={
                 <PrivateRoute>

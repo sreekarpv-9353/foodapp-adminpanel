@@ -24,6 +24,7 @@ import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
+import DriverCreateDialog from '../../components/Admin/DriverCreateDialog'
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
@@ -34,6 +35,8 @@ const Dashboard = () => {
     totalGroceryItems: 0,
     totalSales: 0,
   });
+  const [driverDialogOpen, setDriverDialogOpen] = useState(false);
+
   const [salesData, setSalesData] = useState([]);
   const [orderTypeData, setOrderTypeData] = useState([]);
   const [recentOrders, setRecentOrders] = useState([]);
@@ -309,10 +312,20 @@ const Dashboard = () => {
 
   return (
     <Box>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" gutterBottom sx={{ mb: 0 }}>
-          Dashboard
-        </Typography>
+    <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+      <Typography variant="h4" gutterBottom sx={{ mb: 0 }}>
+        Dashboard
+      </Typography>
+
+      <Box display="flex" gap={2}>
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={() => setDriverDialogOpen(true)}
+        >
+          Add Driver
+        </Button>
+
         <Button
           variant="outlined"
           startIcon={<SettingsIcon />}
@@ -322,7 +335,7 @@ const Dashboard = () => {
           App Settings
         </Button>
       </Box>
-      
+    </Box>
       <Grid container spacing={3}>
         {/* Stats Cards */}
         <Grid item xs={12} sm={6} md={3}>
@@ -645,6 +658,13 @@ const Dashboard = () => {
           </Card>
         </Grid>
       </Grid>
+       <DriverCreateDialog
+      open={driverDialogOpen}
+      onClose={() => setDriverDialogOpen(false)}
+      onDriverCreated={() => {
+        console.log('Driver created');
+      }}
+    />
     </Box>
   );
 };

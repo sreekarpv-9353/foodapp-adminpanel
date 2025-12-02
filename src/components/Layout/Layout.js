@@ -24,8 +24,18 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 
 const drawerWidth = 240;
+
+// const menuItems = [
+//   { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
+//   { text: 'Restaurants', icon: <RestaurantIcon />, path: '/restaurants' },
+//   { text: 'Food Orders', icon: <FastfoodIcon />, path: '/food-orders' },
+//   { text: 'Grocery Items', icon: <GroceryIcon />, path: '/grocery-items' },
+//   { text: 'Grocery Orders', icon: <ShoppingCartIcon />, path: '/grocery-orders' },
+//   { text: 'App Settings', icon: <SettingsIcon />, path: '/settings' }, // Add this line
+// ];
 
 const menuItems = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
@@ -33,8 +43,13 @@ const menuItems = [
   { text: 'Food Orders', icon: <FastfoodIcon />, path: '/food-orders' },
   { text: 'Grocery Items', icon: <GroceryIcon />, path: '/grocery-items' },
   { text: 'Grocery Orders', icon: <ShoppingCartIcon />, path: '/grocery-orders' },
-  { text: 'App Settings', icon: <SettingsIcon />, path: '/settings' }, // Add this line
+
+  // ⭐ New menu item
+  { text: 'Driver Orders', icon: <LocalShippingIcon />, path: '/driver-orders' },
+
+  { text: 'App Settings', icon: <SettingsIcon />, path: '/settings' },
 ];
+
 
 const Layout = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
